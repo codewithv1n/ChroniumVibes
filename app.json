@@ -5,20 +5,52 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#06060b",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.codewithv1n.ChroniumVibes",
+      "permissions": [
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "WAKE_LOCK",
+        "READ_EXTERNAL_STORAGE",
+        "READ_MEDIA_AUDIO"
+      ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "isAccessMediaLocationEnabled": true,
+          "isAudioEnabled": true,
+          "photosPermission": "Allow ChroniumVibes to access your photos.",
+          "savePhotosPermission": "Allow ChroniumVibes to save photos.",
+          "androidPermissions": [
+            "READ_MEDIA_AUDIO",
+            "READ_EXTERNAL_STORAGE"
+          ]
+        }
+      ],
+      "expo-font",
+      "expo-build-properties"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6228a58e-0870-43b7-aafa-701089311019"
+      }
     }
   }
 }
