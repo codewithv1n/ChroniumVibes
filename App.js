@@ -1,16 +1,4 @@
-/**
- * VinVibes — App shell
- *
- * Boot order:
- *   1. storage migrations → user data → audio engine
- *   2. cached library index (instant) → restore last queue
- *   3. incremental MediaStore scan in the background
- *
- * Layout: tab stacks (Home / Search / Library) · mini player · tab bar,
- * with the full player, queue, sheets and toasts as overlays.
- */
-
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { View, Text, Animated, AppState, BackHandler, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,10 +24,9 @@ import { navStore, handleBackPress, TABS } from './src/navigation/navigation';
 import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
-import { AlbumScreen, ArtistScreen, PlaylistScreen, ListScreen } from './src/screens/CollectionScreen';
+import { PlaylistScreen, ListScreen } from './src/screens/CollectionScreen';
 import { SettingsScreen, FoldersScreen } from './src/screens/SettingsScreen';
 import NowPlayingScreen from './src/screens/NowPlayingScreen';
-import QueueScreen from './src/screens/QueueScreen';
 
 import MiniPlayer from './src/components/MiniPlayer';
 import TabBar from './src/components/TabBar';
@@ -51,8 +38,6 @@ import LoadingState from './src/components/LoadingState';
 const ROOTS = { home: HomeScreen, search: SearchScreen, library: LibraryScreen };
 
 const ROUTES = {
-  album: ({ albumId }) => <AlbumScreen albumId={albumId} />,
-  artist: ({ artistId }) => <ArtistScreen artistId={artistId} />,
   playlist: ({ playlistId, openAddSongs }) => <PlaylistScreen playlistId={playlistId} openAddSongs={openAddSongs} />,
   collection: params => <ListScreen {...params} />,
   settings: () => <SettingsScreen />,
@@ -149,6 +134,17 @@ function TabStacks() {
 }
 
 function PermissionScreen({ permission }) {
+  if (permission === 'unsupported') {
+    return (
+      <View style={styles.center}>
+        <EmptyState
+          icon="construct-outline"
+          title="Needs an installed build"
+          message="Expo Go isn't allowed to read music files on Android. Install a VinVibes build (eas build) to scan and play your songs."
+        />
+      </View>
+    );
+  }
   const blocked = permission === 'blocked';
   const onPress = async () => {
     if (blocked) {
@@ -218,7 +214,7 @@ function Shell() {
   }, [onAppStateChange]);
 
   let body;
-  if (!hasAnyIndexed && (permission === 'denied' || permission === 'blocked')) {
+  if (!hasAnyIndexed && ['denied', 'blocked', 'unsupported'].includes(permission)) {
     body = <PermissionScreen permission={permission} />;
   } else if (!hasAnyIndexed && (status === 'idle' || status === 'loading')) {
     body = <LoadingState message="Scanning device..." progress={progress} />;
@@ -263,7 +259,6 @@ function Shell() {
       <TabBar />
       <Toast bottomOffset={insets.bottom + SIZES.tabBarHeight + (hasCurrent ? SIZES.miniPlayerHeight + 16 : 12)} />
       <NowPlayingScreen />
-      <QueueScreen />
       <SheetHost />
     </View>
   );

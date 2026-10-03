@@ -14,13 +14,12 @@ export const navStore = createStore({
   tab: 'home',
   stacks: { home: [], search: [], library: [] },
   playerOpen: false,
-  queueOpen: false,
 });
 
 // A single bottom sheet at a time: { type, props }.
 export const sheetStore = createStore({ sheet: null });
 
-// Which section the Library tab shows (songs, albums, artists, ...).
+// Which section the Library tab shows (songs, playlists, folders).
 export const libraryViewStore = createStore({ view: 'songs' });
 
 /** Open the Library tab on a given section (from Home shortcuts). */
@@ -37,8 +36,7 @@ export function navigate(name, params = {}) {
   navStore.setState({
     stacks: { ...stacks, [tab]: [...stacks[tab], { key: routeKey++, name, params }] },
     playerOpen: false,
-    queueOpen: false,
-  });
+    });
 }
 
 export function goBack() {
@@ -58,21 +56,8 @@ export function switchTab(nextTab) {
   }
 }
 
-/** Jump to a screen inside the Library tab (e.g. from the player). */
-export function navigateInLibrary(name, params = {}) {
-  const { stacks } = navStore.getState();
-  navStore.setState({
-    tab: 'library',
-    stacks: { ...stacks, library: [...stacks.library, { key: routeKey++, name, params }] },
-    playerOpen: false,
-    queueOpen: false,
-  });
-}
-
 export const openPlayer = () => navStore.setState({ playerOpen: true });
-export const closePlayer = () => navStore.setState({ playerOpen: false, queueOpen: false });
-export const openQueue = () => navStore.setState({ queueOpen: true });
-export const closeQueue = () => navStore.setState({ queueOpen: false });
+export const closePlayer = () => navStore.setState({ playerOpen: false });
 
 export function openSheet(type, props = {}) {
   sheetStore.setState({ sheet: { type, props, key: routeKey++ } });
@@ -88,11 +73,7 @@ export function handleBackPress() {
     closeSheet();
     return true;
   }
-  const { queueOpen, playerOpen, tab } = navStore.getState();
-  if (queueOpen) {
-    closeQueue();
-    return true;
-  }
+  const { playerOpen, tab } = navStore.getState();
   if (playerOpen) {
     closePlayer();
     return true;

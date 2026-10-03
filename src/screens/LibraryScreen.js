@@ -1,13 +1,12 @@
 /**
  * VinVibes — Library
  *
- * Songs · Albums · Artists · Playlists · Folders, plus shortcuts to
- * Favorites, Recently added and Most played. Songs can be sorted;
- * albums and artists switch between grid and list.
+ * Songs · Playlists · Folders, plus a Favorites shortcut. Songs can be
+ * sorted.
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, FlatList, ScrollView, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, FlatList, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';
 import { useStore } from '../core/store';
@@ -19,24 +18,18 @@ import { playTracks } from '../player/playerService';
 import { navigate, openSheet, libraryViewStore } from '../navigation/navigation';
 import { showToast } from '../core/toast';
 import SongList from '../components/SongList';
-import Artwork, { CollageArtwork } from '../components/Artwork';
-import { AlbumCard, ArtistCard } from '../components/Cards';
+import { CollageArtwork } from '../components/Artwork';
 import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
 
 const VIEWS = [
   { key: 'songs', label: 'Songs' },
-  { key: 'albums', label: 'Albums' },
-  { key: 'artists', label: 'Artists' },
   { key: 'playlists', label: 'Playlists' },
   { key: 'folders', label: 'Folders' },
 ];
 
 const SHORTCUTS = [
   { kind: 'favorites', label: 'Favorites', icon: 'heart' },
-  { kind: 'recentlyAdded', label: 'Recently added', icon: 'time' },
-  { kind: 'mostPlayed', label: 'Most played', icon: 'stats-chart' },
-  { kind: 'recentlyPlayed', label: 'Recently played', icon: 'play-back' },
 ];
 
 function Chip({ label, active, onPress, icon }) {
@@ -111,43 +104,6 @@ function SongsView() {
       tracks={sorted}
       header={header}
       empty={<EmptyState icon="musical-notes-outline" title="No music found" message="No music was found on this device." />}
-    />
-  );
-}
-
-function GridOrList({ items, renderCard, renderRow, empty }) {
-  const grid = useStore(settingsStore, s => s.libraryGrid);
-  const { width } = useWindowDimensions();
-  const columns = width >= 600 ? 4 : 2;
-  const cardWidth = (width - SPACING.md * 2 - SPACING.md * (columns - 1)) / columns;
-
-  const header = (
-    <View style={styles.toolbar}>
-      <Text style={[styles.countText, styles.countLeft]}>{pluralize(items.length, 'item')}</Text>
-      <IconButton
-        icon={grid ? 'list' : 'grid-outline'}
-        size={20}
-        color={COLORS.textSecondary}
-        onPress={() => updateSettings({ libraryGrid: !grid })}
-        label={grid ? 'Show as list' : 'Show as grid'}
-      />
-    </View>
-  );
-
-  return (
-    <FlatList
-      key={grid ? `grid-${columns}` : 'list'}
-      data={items}
-      numColumns={grid ? columns : 1}
-      keyExtractor={item => item.id}
-      ListHeaderComponent={header}
-      ListEmptyComponent={empty}
-      columnWrapperStyle={grid ? styles.gridRow : undefined}
-      contentContainerStyle={styles.listContent}
-      renderItem={({ item }) => (grid ? renderCard(item, cardWidth) : renderRow(item))}
-      initialNumToRender={12}
-      windowSize={9}
-      removeClippedSubviews
     />
   );
 }
@@ -234,54 +190,10 @@ function FoldersView() {
 
 export default function LibraryScreen() {
   const view = useStore(libraryViewStore, s => s.view);
-  const albums = useStore(libraryStore, s => s.albums);
-  const artists = useStore(libraryStore, s => s.artists);
   const setView = useCallback(v => libraryViewStore.setState({ view: v }), []);
 
   let content;
-  if (view === 'albums') {
-    content = (
-      <GridOrList
-        items={albums}
-        empty={<EmptyState compact icon="disc-outline" title="No albums" message="Albums are created from your songs' tags." />}
-        renderCard={(album, width) => (
-          <View style={{ width, marginBottom: SPACING.lg }}>
-            <AlbumCard album={album} width={width} onPress={a => navigate('album', { albumId: a.id })} />
-          </View>
-        )}
-        renderRow={album => (
-          <ListRow
-            artwork={<Artwork uri={album.artwork} seed={album.name} size={56} icon="disc" />}
-            title={album.name}
-            subtitle={`${album.artist} · ${pluralize(album.trackIds.length, 'song')}`}
-            onPress={() => navigate('album', { albumId: album.id })}
-            label={`Album ${album.name}`}
-          />
-        )}
-      />
-    );
-  } else if (view === 'artists') {
-    content = (
-      <GridOrList
-        items={artists}
-        empty={<EmptyState compact icon="person-outline" title="No artists" message="Artists are created from your songs' tags." />}
-        renderCard={(artist, width) => (
-          <View style={{ width, marginBottom: SPACING.lg, alignItems: 'center' }}>
-            <ArtistCard artist={artist} width={width - 12} onPress={a => navigate('artist', { artistId: a.id })} />
-          </View>
-        )}
-        renderRow={artist => (
-          <ListRow
-            artwork={<Artwork uri={artist.artwork} seed={artist.name} size={56} round icon="person" />}
-            title={artist.name}
-            subtitle={`${pluralize(artist.albumIds.length, 'album')} · ${pluralize(artist.trackIds.length, 'song')}`}
-            onPress={() => navigate('artist', { artistId: artist.id })}
-            label={`Artist ${artist.name}`}
-          />
-        )}
-      />
-    );
-  } else if (view === 'playlists') {
+  if (view === 'playlists') {
     content = <PlaylistsView />;
   } else if (view === 'folders') {
     content = <FoldersView />;
@@ -399,10 +311,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: SPACING.xl,
-  },
-  gridRow: {
-    paddingHorizontal: SPACING.md,
-    gap: SPACING.md,
   },
   listRow: {
     flexDirection: 'row',

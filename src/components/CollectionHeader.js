@@ -1,9 +1,4 @@
-/**
- * VinVibes — Header for album / artist / playlist / folder pages:
- * large artwork, title, meta line, Play + Shuffle and extra actions.
- */
 
-import React from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,14 +6,14 @@ import { COLORS, SPACING, TYPOGRAPHY, placeholderColors } from '../styles/theme'
 import IconButton from './IconButton';
 
 export default function CollectionHeader({
-  artwork, // React element
+  artwork, 
   title,
   subtitle,
   meta,
   seed,
   onPlay,
   onShuffle,
-  actions = [], // [{ icon, label, onPress }]
+  actions = [], 
   disabled,
 }) {
   const { width } = useWindowDimensions();
@@ -26,7 +21,6 @@ export default function CollectionHeader({
 
   return (
     <View>
-      {/* Very subtle tint from the collection's color, fading into black. */}
       <LinearGradient
         colors={[`${tint}55`, COLORS.bgDeep]}
         style={[StyleSheet.absoluteFill, { height: Math.min(width, 420) }]}

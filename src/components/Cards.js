@@ -1,8 +1,4 @@
-/**
- * VinVibes — AlbumCard, ArtistCard, PlaylistCard, MixCard, QuickTile
- */
-
-import React, { memo } from 'react';
+import { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS, SIZES, TYPOGRAPHY } from '../styles/theme';
@@ -23,26 +19,6 @@ function CardShell({ onPress, onLongPress, label, width, children }) {
   );
 }
 
-export const AlbumCard = memo(function AlbumCard({ album, onPress, width = SIZES.cardWidth }) {
-  return (
-    <CardShell onPress={() => onPress(album)} label={`Album ${album.name} by ${album.artist}`} width={width}>
-      <Artwork uri={album.artwork} seed={album.name} size={width} radius={RADIUS.md} icon="disc" />
-      <Text style={styles.title} numberOfLines={1}>{album.name}</Text>
-      <Text style={styles.subtitle} numberOfLines={1}>{album.artist}</Text>
-    </CardShell>
-  );
-});
-
-export const ArtistCard = memo(function ArtistCard({ artist, onPress, width = SIZES.cardWidth - 20 }) {
-  return (
-    <CardShell onPress={() => onPress(artist)} label={`Artist ${artist.name}`} width={width}>
-      <Artwork uri={artist.artwork} seed={artist.name} size={width} round icon="person" />
-      <Text style={[styles.title, styles.center]} numberOfLines={1}>{artist.name}</Text>
-      <Text style={[styles.subtitle, styles.center]} numberOfLines={1}>{pluralize(artist.trackIds.length, 'song')}</Text>
-    </CardShell>
-  );
-});
-
 export const PlaylistCard = memo(function PlaylistCard({ playlist, coverUris, onPress, width = SIZES.cardWidth }) {
   return (
     <CardShell onPress={() => onPress(playlist)} label={`Playlist ${playlist.name}`} width={width}>
@@ -53,22 +29,6 @@ export const PlaylistCard = memo(function PlaylistCard({ playlist, coverUris, on
   );
 });
 
-export const MixCard = memo(function MixCard({ mix, onPress, width = SIZES.cardWidth }) {
-  return (
-    <CardShell onPress={() => onPress(mix)} label={mix.name} width={width}>
-      <View>
-        <Artwork uri={mix.artwork} seed={mix.name} size={width} radius={RADIUS.md} icon="radio" />
-        <View style={[styles.mixBand, { width }]}>
-          <Text style={styles.mixBandText} numberOfLines={1}>MIX</Text>
-        </View>
-      </View>
-      <Text style={styles.title} numberOfLines={1}>{mix.name}</Text>
-      <Text style={styles.subtitle} numberOfLines={1}>{pluralize(mix.trackIds.length, 'song')}</Text>
-    </CardShell>
-  );
-});
-
-/** Track card for horizontal rows (Recently played, Quick picks). */
 export const TrackCard = memo(function TrackCard({ track, onPress, width = SIZES.cardWidth }) {
   return (
     <CardShell onPress={() => onPress(track)} label={`${track.title} by ${track.artist}`} width={width}>
@@ -79,7 +39,6 @@ export const TrackCard = memo(function TrackCard({ track, onPress, width = SIZES
   );
 });
 
-/** Compact two-column shortcut tile used at the top of Home. */
 export const QuickTile = memo(function QuickTile({ icon, label, onPress, artwork, seed }) {
   return (
     <Pressable
@@ -115,22 +74,6 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     fontSize: 12,
     marginTop: 2,
-  },
-  center: {
-    textAlign: 'center',
-  },
-  mixBand: {
-    position: 'absolute',
-    bottom: 0,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(5,7,10,0.55)',
-    borderBottomLeftRadius: RADIUS.md,
-    borderBottomRightRadius: RADIUS.md,
-  },
-  mixBandText: {
-    ...TYPOGRAPHY.micro,
-    color: COLORS.accentLight,
   },
   quickTile: {
     flex: 1,

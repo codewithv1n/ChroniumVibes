@@ -7,10 +7,10 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/theme';
 import { useStore } from '../../core/store';
 import { showToast } from '../../core/toast';
-import { libraryStore, albumIdFor, artistIdFor } from '../../services/libraryService';
+import { libraryStore } from '../../services/libraryService';
 import { favoritesStore, toggleFavorite, removeTrackFromPlaylist } from '../../services/userDataService';
-import { playNow, playNext, addToQueue, removeFromQueue } from '../../player/playerService';
-import { closeSheet, openSheet, navigateInLibrary } from '../../navigation/navigation';
+import { playNow, playNext, addToQueue } from '../../player/playerService';
+import { closeSheet, openSheet } from '../../navigation/navigation';
 import BottomSheet, { SheetAction } from './BottomSheet';
 import Artwork from '../Artwork';
 
@@ -62,19 +62,6 @@ export default function SongActionsSheet({ trackId, context = {} }) {
             })}
           />
         ) : null}
-        {context.queueIndex !== undefined ? (
-          <SheetAction icon="close-circle-outline" label="Remove from queue" onPress={run(() => removeFromQueue(context.queueIndex))} />
-        ) : null}
-        <SheetAction
-          icon="disc-outline"
-          label="Go to album"
-          onPress={run(() => navigateInLibrary('album', { albumId: albumIdFor(track) }))}
-        />
-        <SheetAction
-          icon="person-outline"
-          label="Go to artist"
-          onPress={run(() => navigateInLibrary('artist', { artistId: artistIdFor(track) }))}
-        />
         <SheetAction icon="information-circle-outline" label="Song information" onPress={() => openSheet('songInfo', { trackId: track.id })} />
       </ScrollView>
     </BottomSheet>

@@ -1,20 +1,22 @@
 /**
  * VinVibes — Full player
  *
- * Slides up over the app. Swipe down on the top area (or press back /
- * the chevron) to minimize. Artwork cross-fades between tracks; the
+ * Shown in a Modal: a separate native window that always sits above the
+ * app and slides up natively (an in-app absolute overlay got stuck under
+ * the tab bar on some Android devices). Swipe down on the top area (or
+ * press back / the chevron) to minimize. Artwork cross-fades between tracks; the
  * background takes a subtle tint per album over a black base.
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, Animated, PanResponder, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, Modal, Animated, PanResponder, StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, placeholderColors } from '../styles/theme';
 import { useStore } from '../core/store';
 import { showToast } from '../core/toast';
-import { libraryStore, albumIdFor, artistIdFor, UNKNOWN_ALBUM } from '../services/libraryService';
+import { libraryStore, UNKNOWN_ALBUM } from '../services/libraryService';
 import { favoritesStore, settingsStore, toggleFavorite } from '../services/userDataService';
 import {
   playerStore,
@@ -24,11 +26,11 @@ import {
   toggleShuffle,
   cycleRepeat,
 } from '../player/playerService';
-import { navStore, closePlayer, openQueue, openSheet, navigateInLibrary } from '../navigation/navigation';
+import { navStore, closePlayer, openSheet } from '../navigation/navigation';
 import Artwork from '../components/Artwork';
 import IconButton from '../components/IconButton';
 import ProgressBar from '../components/ProgressBar';
-import { useSleepRemaining } from '../components/sheets/SleepTimerSheet';
+import Toast from '../components/Toast';
 
 function FavoriteButton({ trackId }) {
   const liked = useStore(favoritesStore, s => !!s.favorites[trackId]);
@@ -68,23 +70,14 @@ function PlayPauseButton() {
   );
 }
 
-function SecondaryControls({ track }) {
-  const sleepRemaining = useSleepRemaining();
+/** Lyrics button, shown only for songs with embedded lyrics. */
+function LyricsButton({ track }) {
+  if (!track.hasLyrics) return null;
   return (
     <View style={styles.secondaryRow}>
-      <Pressable style={styles.secondaryButton} onPress={openQueue} accessibilityRole="button" accessibilityLabel="Queue">
-        <Ionicons name="list" size={20} color={COLORS.textSecondary} />
-        <Text style={styles.secondaryText}>Queue</Text>
-      </Pressable>
-      {track.hasLyrics ? (
-        <Pressable style={styles.secondaryButton} onPress={() => openSheet('lyrics', { trackId: track.id })} accessibilityRole="button" accessibilityLabel="Lyrics">
-          <Ionicons name="chatbox-ellipses-outline" size={20} color={COLORS.textSecondary} />
-          <Text style={styles.secondaryText}>Lyrics</Text>
-        </Pressable>
-      ) : null}
-      <Pressable style={styles.secondaryButton} onPress={() => openSheet('sleepTimer')} accessibilityRole="button" accessibilityLabel={sleepRemaining ? `Sleep timer, ${sleepRemaining}` : 'Sleep timer'}>
-        <Ionicons name={sleepRemaining ? 'moon' : 'moon-outline'} size={20} color={sleepRemaining ? COLORS.accentLight : COLORS.textSecondary} />
-        <Text style={[styles.secondaryText, sleepRemaining && styles.secondaryActive]}>{sleepRemaining || 'Timer'}</Text>
+      <Pressable style={styles.secondaryButton} onPress={() => openSheet('lyrics', { trackId: track.id })} accessibilityRole="button" accessibilityLabel="Lyrics">
+        <Ionicons name="chatbox-ellipses-outline" size={20} color={COLORS.textSecondary} />
+        <Text style={styles.secondaryText}>Lyrics</Text>
       </Pressable>
     </View>
   );
@@ -93,34 +86,44 @@ function SecondaryControls({ track }) {
 export default function NowPlayingScreen() {
   const open = useStore(navStore, s => s.playerOpen);
   const currentId = useStore(playerStore, s => s.currentId);
+  const track = useStore(libraryStore, s => (currentId ? s.byId.get(currentId) : null));
+  const animationsOn = useStore(settingsStore, s => s.animations);
+
+  return (
+    <Modal
+      visible={open && !!track}
+      animationType={animationsOn ? 'slide' : 'none'}
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={closePlayer}
+    >
+      {track ? <PlayerSheet track={track} /> : null}
+    </Modal>
+  );
+}
+
+// Lifts the controls off the bottom edge so they're easy to reach.
+const CONTROLS_BOTTOM_SPACE = 56;
+
+function PlayerSheet({ track }) {
+  const currentId = track.id;
   const shuffle = useStore(playerStore, s => s.shuffle);
   const repeat = useStore(playerStore, s => s.repeat);
-  const track = useStore(libraryStore, s => (currentId ? s.byId.get(currentId) : null));
   const animationsOn = useStore(settingsStore, s => s.animations);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
-  const translateY = useRef(new Animated.Value(height)).current;
+  // Only used while dragging down to dismiss.
+  const translateY = useRef(new Animated.Value(0)).current;
   const artOpacity = useRef(new Animated.Value(1)).current;
-  const [mounted, setMounted] = React.useState(open);
 
-  // Slide in / out.
+  // Cross-fade artwork when the track changes (not on first open).
+  const firstTrack = useRef(currentId);
   useEffect(() => {
-    if (open) setMounted(true);
-    Animated.timing(translateY, {
-      toValue: open ? 0 : height,
-      duration: animationsOn ? 280 : 0,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished && !open) setMounted(false);
-    });
-  }, [open, height, translateY, animationsOn]);
-
-  // Cross-fade artwork when the track changes.
-  useEffect(() => {
-    if (!animationsOn) return;
+    if (!animationsOn || currentId === firstTrack.current) return;
+    firstTrack.current = null;
     artOpacity.setValue(0.25);
-    Animated.timing(artOpacity, { toValue: 1, duration: 320, useNativeDriver: true }).start();
+    Animated.timing(artOpacity, { toValue: 1, duration: 320, useNativeDriver: false }).start();
   }, [currentId, artOpacity, animationsOn]);
 
   const pan = useRef(
@@ -128,23 +131,26 @@ export default function NowPlayingScreen() {
       onMoveShouldSetPanResponder: (_, g) => g.dy > 12 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
       onPanResponderMove: (_, g) => translateY.setValue(Math.max(0, g.dy)),
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 140 || g.vy > 1.2) closePlayer();
-        else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        if (g.dy > 140 || g.vy > 1.2) {
+          closePlayer();
+          // Reset after the Modal has slid away.
+          setTimeout(() => translateY.setValue(0), 400);
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: false }).start();
+        }
       },
-      onPanResponderTerminate: () => Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start(),
+      onPanResponderTerminate: () => Animated.spring(translateY, { toValue: 0, useNativeDriver: false }).start(),
     })
   ).current;
-
-  if (!mounted || !track) return null;
 
   const artSize = Math.min(width - SPACING.lg * 2, height * 0.42, 420);
   const [tint] = placeholderColors(track.album);
 
   return (
-    <Animated.View style={[styles.container, { transform: [{ translateY }] }]} accessibilityViewIsModal>
+    <Animated.View style={[styles.container, { transform: [{ translateY }] }]}>
       <LinearGradient colors={[`${tint}66`, COLORS.bgDeep, COLORS.bgDeep]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
 
-      <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom + SPACING.md }]}>
+      <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, SPACING.md) + CONTROLS_BOTTOM_SPACE }]}>
         {/* ── Top bar (also the swipe-down handle) ─────────── */}
         <View style={styles.topBar} {...pan.panHandlers}>
           <IconButton icon="chevron-down" size={28} onPress={closePlayer} label="Minimize player" />
@@ -168,9 +174,7 @@ export default function NowPlayingScreen() {
         <View style={styles.titleRow}>
           <View style={styles.titleText}>
             <Text style={styles.title} numberOfLines={1}>{track.title}</Text>
-            <Pressable onPress={() => navigateInLibrary('artist', { artistId: artistIdFor(track) })} accessibilityRole="link" accessibilityLabel={`Go to artist ${track.artist}`}>
-              <Text style={styles.artist} numberOfLines={1}>{track.artist}</Text>
-            </Pressable>
+            <Text style={styles.artist} numberOfLines={1}>{track.artist}</Text>
           </View>
           <FavoriteButton trackId={track.id} />
         </View>
@@ -202,24 +206,18 @@ export default function NowPlayingScreen() {
           </View>
         </View>
 
-        <SecondaryControls track={track} />
+        <LyricsButton track={track} />
 
-        {track.album !== UNKNOWN_ALBUM ? (
-          <Pressable onPress={() => navigateInLibrary('album', { albumId: albumIdFor(track) })} hitSlop={8} accessibilityRole="link" style={styles.albumLink}>
-            <Text style={styles.albumLinkText} numberOfLines={1}>From the album · {track.album}</Text>
-          </Pressable>
-        ) : null}
       </View>
+      <Toast bottomOffset={insets.bottom + SPACING.lg} />
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: COLORS.bgDeep,
-    zIndex: 20,
-    elevation: 20,
   },
   inner: {
     flex: 1,
@@ -324,17 +322,5 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     fontSize: 12,
     fontVariant: ['tabular-nums'],
-  },
-  secondaryActive: {
-    color: COLORS.accentLight,
-  },
-  albumLink: {
-    alignSelf: 'center',
-    marginTop: SPACING.md,
-  },
-  albumLinkText: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 12,
-    color: COLORS.textMuted,
   },
 });

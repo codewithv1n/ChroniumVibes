@@ -1,0 +1,156 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+index c76a9fd..2432fe2 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+@@ -123,6 +123,14 @@ class AudioPlayer(
+     }
+   }
+ 
++  /**
++   * Lock screen / notification Previous & Next buttons. Track changes are
++   * handled in JS, so the press is forwarded as a "remoteCommand" event.
++   */
++  fun emitRemoteCommand(command: String) {
++    emit("remoteCommand", mapOf("command" to command))
++  }
++
+   fun updateLockScreenMetadata(metadata: Metadata) {
+     if (isActiveForLockScreen) {
+       this.metadata = metadata
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+index 196a5d5..5691391 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -88,8 +88,8 @@ class AudioControlsService : MediaSessionService() {
+             currentPlayerRef.play()
+           }
+ 
+-        ACTION_SEEK_FORWARD -> currentPlayerRef.seekTo(currentPlayerRef.currentPosition + SEEK_INTERVAL_MS)
+-        ACTION_SEEK_BACKWARD -> currentPlayerRef.seekTo(currentPlayerRef.currentPosition - SEEK_INTERVAL_MS)
++        ACTION_SEEK_FORWARD -> forwardRemoteCommand("next")
++        ACTION_SEEK_BACKWARD -> forwardRemoteCommand("previous")
+       }
+     }
+ 
+@@ -195,8 +195,8 @@ class AudioControlsService : MediaSessionService() {
+       if (currentOptions?.showSeekBackward == true) {
+         builder.addAction(
+           NotificationCompat.Action(
+-            androidx.media3.session.R.drawable.media3_icon_skip_back,
+-            "Seek Backward",
++            androidx.media3.session.R.drawable.media3_icon_previous,
++            "Previous",
+             buildActionPendingIntent(ACTION_SEEK_BACKWARD)
+           )
+         )
+@@ -221,8 +221,8 @@ class AudioControlsService : MediaSessionService() {
+       if (currentOptions?.showSeekForward == true) {
+         builder.addAction(
+           NotificationCompat.Action(
+-            androidx.media3.session.R.drawable.media3_icon_skip_forward,
+-            "Seek Forward",
++            androidx.media3.session.R.drawable.media3_icon_next,
++            "Next",
+             buildActionPendingIntent(ACTION_SEEK_FORWARD)
+           )
+         )
+@@ -243,8 +243,8 @@ class AudioControlsService : MediaSessionService() {
+     // Add seek backward button if enabled
+     if (currentOptions?.showSeekBackward == true) {
+       mediaButtons.add(
+-        CommandButton.Builder(CommandButton.ICON_SKIP_BACK_10)
+-          .setDisplayName("Seek Backward")
++        CommandButton.Builder(CommandButton.ICON_PREVIOUS)
++          .setDisplayName("Previous")
+           .setEnabled(true)
+           .setSessionCommand(SessionCommand(ACTION_SEEK_BACKWARD, Bundle.EMPTY))
+           .setSlots(CommandButton.SLOT_BACK)
+@@ -265,8 +265,8 @@ class AudioControlsService : MediaSessionService() {
+     // Add seek forward button if enabled
+     if (currentOptions?.showSeekForward == true) {
+       mediaButtons.add(
+-        CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_10)
+-          .setDisplayName("Seek Forward")
++        CommandButton.Builder(CommandButton.ICON_NEXT)
++          .setDisplayName("Next")
+           .setEnabled(true)
+           .setSessionCommand(SessionCommand(ACTION_SEEK_FORWARD, Bundle.EMPTY))
+           .setSlots(CommandButton.SLOT_FORWARD)
+@@ -371,7 +371,7 @@ class AudioControlsService : MediaSessionService() {
+           updateMetadata(metadata)
+         }
+         val session = MediaSession.Builder(context, sessionPlayer)
+-          .setCallback(AudioMediaSessionCallback())
++          .setCallback(AudioMediaSessionCallback { command -> forwardRemoteCommand(command) })
+           .build()
+ 
+         // Replace the basic media session with a session connected to our playback service.
+@@ -452,7 +452,7 @@ class AudioControlsService : MediaSessionService() {
+           updateMetadata(metadata)
+         }
+         val session = MediaSession.Builder(context, sessionPlayer)
+-          .setCallback(AudioMediaSessionCallback())
++          .setCallback(AudioMediaSessionCallback { command -> forwardRemoteCommand(command) })
+           .build()
+ 
+         player.mediaSession.release()
+@@ -510,6 +510,28 @@ class AudioControlsService : MediaSessionService() {
+     notificationManager.cancel(notificationId)
+   }
+ 
++  /** Previous / Next pressed on the lock screen or notification. */
++  private fun forwardRemoteCommand(command: String) {
++    currentPlayer?.emitRemoteCommand(command)
++  }
++
++  /**
++   * Keep playing when the user swipes the app away from Recents.
++   *
++   * Media3's default implementation decides via isPlaybackOngoing(), which only
++   * tracks foreground state started by its own MediaNotificationManager. This
++   * service posts its foreground notification itself (onUpdateNotification), so
++   * that check is always false and the default would pause and stop playback.
++   * Only fall back to the default (pause + stop) when nothing is playing.
++   */
++  override fun onTaskRemoved(rootIntent: Intent?) {
++    val player = currentPlayer?.ref
++    val isPlaying = player != null && (player.isPlaying || player.playWhenReady)
++    if (!isPlaying) {
++      super.onTaskRemoved(rootIntent)
++    }
++  }
++
+   override fun onDestroy() {
+     super.onDestroy()
+ 
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+index 839aaef..eafb4fa 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+@@ -10,7 +10,9 @@ import androidx.media3.common.util.UnstableApi
+ import com.google.common.util.concurrent.ListenableFuture
+ 
+ @OptIn(UnstableApi::class)
+-class AudioMediaSessionCallback : MediaSession.Callback {
++class AudioMediaSessionCallback(
++  private val onRemoteCommand: (String) -> Unit = {}
++) : MediaSession.Callback {
+   override fun onConnect(
+     session: MediaSession,
+     controller: MediaSession.ControllerInfo
+@@ -50,12 +52,9 @@ class AudioMediaSessionCallback : MediaSession.Callback {
+     args: Bundle
+   ): ListenableFuture<SessionResult> {
+     when (command.customAction) {
+-      AudioControlsService.ACTION_SEEK_FORWARD -> {
+-        session.player.seekTo(session.player.currentPosition + AudioControlsService.SEEK_INTERVAL_MS)
+-      }
+-      AudioControlsService.ACTION_SEEK_BACKWARD -> {
+-        session.player.seekTo(session.player.currentPosition - AudioControlsService.SEEK_INTERVAL_MS)
+-      }
++      // These buttons are shown as Previous / Next (see AudioControlsService).
++      AudioControlsService.ACTION_SEEK_FORWARD -> onRemoteCommand("next")
++      AudioControlsService.ACTION_SEEK_BACKWARD -> onRemoteCommand("previous")
+     }
+     return super.onCustomCommand(session, controller, command, args)
+   }

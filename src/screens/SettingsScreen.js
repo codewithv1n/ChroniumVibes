@@ -163,9 +163,9 @@ export function SettingsScreen() {
 
         <Section title="DATA">
           <Row icon="time-outline" label="Clear listening history" destructive
-            onPress={() => confirm('Clear listening history?', 'Recently played, play counts and listening time will be removed.', clearListeningHistory, 'Listening history cleared')} />
+            onPress={() => confirm('Clear listening history?', 'Play counts and listening time will be removed. Home suggestions will start fresh.', clearListeningHistory, 'Listening history cleared')} />
           <Row icon="stats-chart-outline" label="Reset play counts" destructive
-            onPress={() => confirm('Reset play counts?', 'Most played and Quick picks will start fresh.', resetPlayCounts, 'Play counts reset')} />
+            onPress={() => confirm('Reset play counts?', 'Quick picks on Home will start fresh.', resetPlayCounts, 'Play counts reset')} />
           <Row icon="search-outline" label="Clear recent searches" destructive
             onPress={() => { clearRecentSearches(); showToast('Recent searches cleared'); }} />
         </Section>

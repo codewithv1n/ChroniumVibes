@@ -8,14 +8,12 @@ import { sheetStore } from '../../navigation/navigation';
 import SongActionsSheet from './SongActionsSheet';
 import AddToPlaylistSheet from './AddToPlaylistSheet';
 import SongInfoSheet from './SongInfoSheet';
-import SleepTimerSheet from './SleepTimerSheet';
 import { SortSheet, PromptSheet, ConfirmSheet, LyricsSheet } from './SimpleSheets';
 
 const SHEETS = {
   songActions: SongActionsSheet,
   addToPlaylist: AddToPlaylistSheet,
   songInfo: SongInfoSheet,
-  sleepTimer: SleepTimerSheet,
   sort: SortSheet,
   prompt: PromptSheet,
   confirm: ConfirmSheet,

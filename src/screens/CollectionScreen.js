@@ -1,21 +1,19 @@
 /**
  * VinVibes — Collection pages
  *
- * One screen for every list of songs: album, artist, playlist, folder,
- * favorites, mixes and smart lists (recently added / played, most
- * played, all songs).
+ * One screen for every list of songs: playlist, folder, favorites,
+ * and all songs.
  */
 
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
-import { COLORS, SPACING, RADIUS } from '../styles/theme';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { COLORS, RADIUS } from '../styles/theme';
 import { useStore } from '../core/store';
 import { pluralize, formatTotalDuration } from '../core/format';
 import { showToast } from '../core/toast';
-import { sortAlbumTracks, sortTracks } from '../core/sorting';
-import { libraryStore, prettyFolderPath, UNKNOWN_ALBUM } from '../services/libraryService';
+import { sortTracks } from '../core/sorting';
+import { libraryStore, prettyFolderPath } from '../services/libraryService';
 import {
-  statsStore,
   favoritesStore,
   playlistsStore,
   getFavoriteIds,
@@ -25,24 +23,18 @@ import {
   addTrackToPlaylist,
   removeTrackFromPlaylist,
 } from '../services/userDataService';
-import * as Rec from '../services/recommendations';
 import { playTracks } from '../player/playerService';
-import { goBack, navigate, openSheet } from '../navigation/navigation';
+import { goBack, openSheet } from '../navigation/navigation';
 import ScreenHeader from '../components/ScreenHeader';
 import CollectionHeader from '../components/CollectionHeader';
 import SongList from '../components/SongList';
 import Artwork, { CollageArtwork } from '../components/Artwork';
-import { AlbumCard } from '../components/Cards';
 import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
-import SectionHeader from '../components/SectionHeader';
 import AddSongsModal from '../components/AddSongsModal';
 
 const SMART_LISTS = {
   favorites: { title: 'Favorites', icon: 'heart', empty: ['heart-outline', 'No favorites yet', 'Songs you like will appear here.'] },
-  recentlyAdded: { title: 'Recently added', icon: 'time', empty: ['time-outline', 'Nothing here yet', 'Songs recently added to this device will appear here.'] },
-  mostPlayed: { title: 'Most played', icon: 'stats-chart', empty: ['stats-chart-outline', 'No plays yet', 'Your most played songs will appear here.'] },
-  recentlyPlayed: { title: 'Recently played', icon: 'play-back', empty: ['play-back-outline', 'Nothing played yet', 'Songs you play will appear here.'] },
   allSongs: { title: 'All songs', icon: 'musical-notes', empty: ['musical-notes-outline', 'No music found', 'No music was found on this device.'] },
 };
 
@@ -59,104 +51,6 @@ function playAll(tracks, shuffle = false) {
   if (tracks.length === 0) return;
   const ids = tracks.map(t => t.id);
   playTracks(ids, shuffle ? Math.floor(Math.random() * ids.length) : 0, { shuffle });
-}
-
-// ── Album ─────────────────────────────────────────────────────
-
-export function AlbumScreen({ albumId }) {
-  const album = useStore(libraryStore, s => s.albums.find(a => a.id === albumId));
-  const byId = useStore(libraryStore, s => s.byId);
-  const size = useArtSize();
-  const tracks = useMemo(
-    () => (album ? sortAlbumTracks(album.trackIds.map(id => byId.get(id)).filter(Boolean)) : []),
-    [album, byId]
-  );
-
-  if (!album) return <Missing title="Album" />;
-
-  const meta = [album.year || null, pluralize(tracks.length, 'song'), formatTotalDuration(totalDuration(tracks))]
-    .filter(Boolean)
-    .join(' · ');
-
-  return (
-    <View style={styles.flex}>
-      <ScreenHeader title="" transparent />
-      <SongList
-        tracks={tracks}
-        showIndex={album.name !== UNKNOWN_ALBUM}
-        header={
-          <CollectionHeader
-            seed={album.name}
-            artwork={<Artwork uri={album.artwork} seed={album.name} size={size} radius={RADIUS.md} icon="disc" />}
-            title={album.name}
-            subtitle={album.artist}
-            meta={`Album · ${meta}`}
-            onPlay={() => playAll(tracks)}
-            onShuffle={() => playAll(tracks, true)}
-          />
-        }
-      />
-    </View>
-  );
-}
-
-// ── Artist ────────────────────────────────────────────────────
-
-export function ArtistScreen({ artistId }) {
-  const artist = useStore(libraryStore, s => s.artists.find(a => a.id === artistId));
-  const albums = useStore(libraryStore, s => s.albums);
-  const byId = useStore(libraryStore, s => s.byId);
-  const stats = useStore(statsStore, s => s.stats);
-  const size = useArtSize();
-
-  const tracks = useMemo(
-    () => (artist ? sortTracks(artist.trackIds.map(id => byId.get(id)).filter(Boolean), { key: 'plays', ascending: false }, stats) : []),
-    // Sorted once per visit; avoid reshuffling while songs play.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [artist, byId]
-  );
-  const artistAlbums = useMemo(
-    () => (artist ? albums.filter(a => artist.albumIds.includes(a.id) && a.name !== UNKNOWN_ALBUM) : []),
-    [artist, albums]
-  );
-
-  if (!artist) return <Missing title="Artist" />;
-
-  return (
-    <View style={styles.flex}>
-      <ScreenHeader title="" transparent />
-      <SongList
-        tracks={tracks}
-        header={
-          <View>
-            <CollectionHeader
-              seed={artist.name}
-              artwork={<Artwork uri={artist.artwork} seed={artist.name} size={size * 0.85} round icon="person" />}
-              title={artist.name}
-              meta={`${pluralize(tracks.length, 'song')} · ${pluralize(artist.albumIds.length, 'album')}`}
-              onPlay={() => playAll(tracks)}
-              onShuffle={() => playAll(tracks, true)}
-            />
-            {artistAlbums.length > 0 && (
-              <View style={styles.artistAlbums}>
-                <SectionHeader title="Albums" />
-                <FlatList
-                  horizontal
-                  data={artistAlbums}
-                  keyExtractor={a => a.id}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.hRow}
-                  ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
-                  renderItem={({ item }) => <AlbumCard album={item} onPress={a => navigate('album', { albumId: a.id })} />}
-                />
-              </View>
-            )}
-            <SectionHeader title="Songs" style={styles.songsHeader} />
-          </View>
-        }
-      />
-    </View>
-  );
 }
 
 // ── Playlist ──────────────────────────────────────────────────
@@ -284,20 +178,14 @@ export function PlaylistScreen({ playlistId, openAddSongs = false }) {
   );
 }
 
-// ── Folder, mixes and smart lists ─────────────────────────────
+// ── Folder, favorites and all songs ───────────────────────────
 
-export function ListScreen({ kind, folderId, mix }) {
+export function ListScreen({ kind, folderId }) {
   const tracksAll = useStore(libraryStore, s => s.tracks);
   const byId = useStore(libraryStore, s => s.byId);
   const folders = useStore(libraryStore, s => s.folders);
   const favorites = useStore(favoritesStore, s => s.favorites);
-  const stats = useStore(statsStore, s => s.stats);
   const size = useArtSize();
-
-  // Stat-based lists are captured when the screen opens so the order
-  // doesn't jump while the user is listening.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const statsSnapshot = useMemo(() => stats, [kind, tracksAll]);
 
   const { title, tracks, artwork, meta, emptyInfo, icon } = useMemo(() => {
     if (kind === 'folder') {
@@ -311,27 +199,14 @@ export function ListScreen({ kind, folderId, mix }) {
         emptyInfo: ['folder-open-outline', 'Empty folder', 'This folder has no songs in your library.'],
       };
     }
-    if (kind === 'mix') {
-      return {
-        title: mix?.name || 'Mix',
-        tracks: (mix?.trackIds || []).map(id => byId.get(id)).filter(Boolean),
-        artwork: mix?.artwork,
-        meta: 'Made from your library',
-        icon: 'radio',
-        emptyInfo: ['radio-outline', 'Empty mix', 'Play more music to build mixes.'],
-      };
-    }
     const info = SMART_LISTS[kind] || SMART_LISTS.allSongs;
     let list;
     switch (kind) {
       case 'favorites': list = getFavoriteIds(favorites).map(id => byId.get(id)).filter(Boolean); break;
-      case 'recentlyAdded': list = Rec.recentlyAdded(tracksAll, 100); break;
-      case 'mostPlayed': list = Rec.mostPlayed(tracksAll, statsSnapshot, 100); break;
-      case 'recentlyPlayed': list = Rec.recentlyPlayed(tracksAll, statsSnapshot, 100); break;
       default: list = sortTracks(tracksAll, { key: 'title', ascending: true });
     }
     return { title: info.title, tracks: list, icon: info.icon, emptyInfo: info.empty };
-  }, [kind, folderId, mix, folders, byId, favorites, tracksAll, statsSnapshot]);
+  }, [kind, folderId, folders, byId, favorites, tracksAll]);
 
   const cover = artwork !== undefined
     ? <Artwork uri={artwork} seed={title} size={size} radius={RADIUS.md} icon={icon} />
@@ -370,15 +245,6 @@ function Missing({ title }) {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-  },
-  artistAlbums: {
-    marginTop: SPACING.md,
-  },
-  hRow: {
-    paddingHorizontal: SPACING.md,
-  },
-  songsHeader: {
-    marginTop: SPACING.lg,
   },
   reorder: {
     flexDirection: 'row',

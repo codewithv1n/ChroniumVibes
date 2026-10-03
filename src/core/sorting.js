@@ -43,9 +43,3 @@ export function sortTracks(tracks, { key, ascending }, stats = {}) {
   return [...tracks].sort((a, b) => dir * compare(a, b) || collator.compare(a.title, b.title));
 }
 
-/** Album track order: disc/track number, then title. */
-export function sortAlbumTracks(tracks) {
-  return [...tracks].sort(
-    (a, b) => (a.trackNumber || 999) - (b.trackNumber || 999) || collator.compare(a.title, b.title)
-  );
-}

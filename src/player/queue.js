@@ -1,12 +1,3 @@
-/**
- * VinVibes — Play queue logic (pure functions, no side effects)
- *
- * A queue is { order, original, index }:
- *   order    – track ids in the order they will play
- *   original – the un-shuffled order, kept only while shuffle is on
- *   index    – position of the current track in `order`
- */
-
 export function shuffleArray(items, random = Math.random) {
   const out = [...items];
   for (let i = out.length - 1; i > 0; i--) {
@@ -42,7 +33,7 @@ export function setShuffle(queue, enabled, random) {
   return { order: [...queue.original], original: null, index };
 }
 
-/** Insert right after the current track. */
+
 export function playNext(queue, id) {
   const order = [...queue.order];
   order.splice(queue.index + 1, 0, id);
@@ -64,7 +55,6 @@ export function addToQueue(queue, ids) {
   };
 }
 
-/** Remove the item at `position` (never the current track). */
 export function removeAt(queue, position) {
   if (position === queue.index || position < 0 || position >= queue.order.length) return queue;
   const order = [...queue.order];
@@ -91,16 +81,12 @@ export function move(queue, from, to) {
   return { order, original: queue.original, index };
 }
 
-/** Drop everything after the current track. */
+
 export function clearUpcoming(queue) {
   const order = queue.order.slice(0, queue.index + 1);
   return { order, original: queue.original ? [...order] : null, index: queue.index };
 }
 
-/**
- * Index that follows the current one, honoring repeat mode.
- * Returns null at the end of the queue when repeat is off.
- */
 export function nextIndex(queue, repeat) {
   if (queue.order.length === 0) return null;
   if (queue.index + 1 < queue.order.length) return queue.index + 1;
@@ -113,7 +99,6 @@ export function previousIndex(queue, repeat) {
   return repeat === 'all' ? queue.order.length - 1 : 0;
 }
 
-/** Remove ids that no longer exist in the library. */
 export function pruneQueue(queue, exists) {
   const current = currentId(queue);
   const order = queue.order.filter(exists);

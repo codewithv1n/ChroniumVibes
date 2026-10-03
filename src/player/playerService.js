@@ -9,13 +9,14 @@
  * - Lock screen controls are activated ONCE; afterwards only the metadata
  *   is updated. Re-activating them per track rebuilds the media session,
  *   which drops the foreground service and lets Android kill playback.
- * - expo-audio exposes no next/previous lock screen buttons, so its ±10s
- *   seek buttons are detected and mapped to next / previous track.
+ * - Lock screen / notification Previous & Next come from the patched
+ *   expo-audio service (patches/expo-audio+*.patch) as "remoteCommand"
+ *   events; the queue lives here in JS, so JS changes the track.
  * - Audio focus (calls, other apps) is handled natively by expo-audio.
  */
 
-import { AppState } from 'react-native';
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { AppState, Platform } from 'react-native';
+import { createAudioPlayer, setAudioModeAsync, requestNotificationPermissionsAsync } from 'expo-audio';
 import { Asset } from 'expo-asset';
 import { createStore } from '../core/store';
 import { KEYS, readJSON, createDebouncedWriter } from '../core/storage';
@@ -29,9 +30,6 @@ import {
   addListeningTime,
 } from '../services/userDataService';
 
-const LOCK_SCREEN_SEEK_STEP = 10;
-const SEEK_MATCH_TOLERANCE = 2;
-const JUMP_GRACE_MS = 1500;
 const PLAY_COUNT_SECONDS = 30;
 
 export const playerStore = createStore({
@@ -43,23 +41,33 @@ export const playerStore = createStore({
   isBuffering: false,
   shuffle: false,
   repeat: 'off', // off | all | one
-  sleep: null, // { endsAt } | { endOfTrack: true }
 });
 
 // Updated every ~500ms; kept separate so only progress UI re-renders.
 export const progressStore = createStore({ position: 0, duration: 0 });
 
 let player = null;
+
+// Fast Refresh (development) re-runs this module and would create a second
+// native player while the old one keeps playing, unreachable by the app and
+// the lock screen. Release any player left by a previous copy of the module.
+const PLAYER_GLOBAL_KEY = '__vinvibesAudioPlayer';
+if (globalThis[PLAYER_GLOBAL_KEY]) {
+  try {
+    globalThis[PLAYER_GLOBAL_KEY].pause();
+    globalThis[PLAYER_GLOBAL_KEY].remove();
+  } catch (error) {
+    // Already released.
+  }
+  globalThis[PLAYER_GLOBAL_KEY] = null;
+}
 let lockScreenActive = false;
 let fallbackArtworkUrl = null;
 let loadToken = 0;
 let hasAdvancedForToken = -1;
 let consecutiveFailures = 0;
-let ignoreJumpsUntil = 0;
-let lastProgress = null;
 let pendingResumePosition = 0;
 let playCountedForToken = -1;
-let sleepTimer = null;
 
 const persistWriter = createDebouncedWriter(KEYS.player, 2000);
 
@@ -158,6 +166,11 @@ function ensurePlayer() {
   if (!player) {
     player = createAudioPlayer(null, { updateInterval: 500 });
     player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
+    player.addListener('remoteCommand', ({ command } = {}) => {
+      if (command === 'next') skipToNext();
+      else if (command === 'previous') skipToPrevious();
+    });
+    globalThis[PLAYER_GLOBAL_KEY] = player;
   }
   return player;
 }
@@ -169,6 +182,18 @@ function lockScreenMetadata(track) {
     albumTitle: track.album,
     artworkUrl: track.artwork || fallbackArtworkUrl || undefined,
   };
+}
+
+/**
+ * Android 13+: ask once for notification permission. Media controls are
+ * normally exempt, but some manufacturers hide the playback notification
+ * (and its lock screen controller) without it.
+ */
+let notificationPermissionAsked = false;
+function ensureNotificationPermission() {
+  if (notificationPermissionAsked || Platform.OS !== 'android') return;
+  notificationPermissionAsked = true;
+  requestNotificationPermissionsAsync().catch(() => {});
 }
 
 function applyLockScreenControls(track) {
@@ -214,8 +239,6 @@ async function loadIndex(index, { autoplay = true, startAt = 0 } = {}) {
   try {
     const audioPlayer = ensurePlayer();
     if (token !== loadToken) return;
-    ignoreJumpsUntil = Date.now() + JUMP_GRACE_MS;
-    lastProgress = null;
     pendingResumePosition = 0;
 
     audioPlayer.replace({ uri: track.url });
@@ -226,6 +249,7 @@ async function loadIndex(index, { autoplay = true, startAt = 0 } = {}) {
     // A newer request (e.g. rapid Next taps) superseded this one.
     if (token !== loadToken) return;
     if (autoplay) {
+      ensureNotificationPermission();
       audioPlayer.play();
       recordPlayStarted(track.id);
     }
@@ -278,24 +302,6 @@ export function addToQueue(ids) {
   showToast('Added to queue');
 }
 
-export function removeFromQueue(position) {
-  setQueue(Q.removeAt(getQueue(), position));
-}
-
-export function moveInQueue(from, to) {
-  setQueue(Q.move(getQueue(), from, to));
-}
-
-export function clearQueue() {
-  setQueue(Q.clearUpcoming(getQueue()));
-  showToast('Queue cleared');
-}
-
-export function skipToQueueIndex(position) {
-  consecutiveFailures = 0;
-  loadIndex(position);
-}
-
 export function togglePlayPause() {
   const { currentId } = playerStore.getState();
   if (!currentId) return;
@@ -310,10 +316,6 @@ export function togglePlayPause() {
   } else {
     player.play();
   }
-}
-
-export function pause() {
-  if (player?.playing) player.pause();
 }
 
 export function skipToNext() {
@@ -340,8 +342,6 @@ export async function seekTo(seconds) {
       progressStore.setState({ position: seconds });
       return;
     }
-    ignoreJumpsUntil = Date.now() + JUMP_GRACE_MS;
-    lastProgress = null;
     progressStore.setState({ position: seconds });
     await player.seekTo(seconds);
   } catch (error) {
@@ -365,68 +365,9 @@ export function cycleRepeat() {
   showToast(labels[repeat], { icon: 'repeat' });
 }
 
-// ── Sleep timer ───────────────────────────────────────────────
-
-/** minutes: number, 'end' (end of current track) or null to cancel. */
-export function setSleepTimer(minutes) {
-  if (sleepTimer) clearTimeout(sleepTimer);
-  sleepTimer = null;
-  if (minutes === null) {
-    playerStore.setState({ sleep: null });
-    showToast('Sleep timer off', { icon: 'moon-outline' });
-    return;
-  }
-  if (minutes === 'end') {
-    playerStore.setState({ sleep: { endOfTrack: true } });
-    showToast('Music will stop at the end of this song', { icon: 'moon-outline' });
-    return;
-  }
-  const endsAt = Date.now() + minutes * 60 * 1000;
-  playerStore.setState({ sleep: { endsAt } });
-  // The status listener also checks the deadline, in case JS timers are
-  // throttled while the screen is off.
-  sleepTimer = setTimeout(checkSleepTimer, minutes * 60 * 1000 + 250);
-  showToast(`Sleep timer set for ${minutes} min`, { icon: 'moon-outline' });
-}
-
-function checkSleepTimer() {
-  const { sleep } = playerStore.getState();
-  if (sleep?.endsAt && Date.now() >= sleep.endsAt) {
-    if (sleepTimer) clearTimeout(sleepTimer);
-    sleepTimer = null;
-    playerStore.setState({ sleep: null });
-    pause();
-    persistNow();
-  }
-}
-
 // ── Status handling ───────────────────────────────────────────
 
-/** Detect a lock screen ±10s seek button press. */
-function detectLockScreenSkip(status) {
-  const now = Date.now();
-  const prev = lastProgress;
-  lastProgress = { time: status.currentTime || 0, at: now, playing: status.playing, rate: status.playbackRate || 1 };
-  if (!prev || now < ignoreJumpsUntil || !status.isLoaded) return null;
-
-  const elapsed = prev.playing ? ((now - prev.at) / 1000) * prev.rate : 0;
-  const expected = prev.time + elapsed;
-  const drift = lastProgress.time - expected;
-
-  if (Math.abs(drift - LOCK_SCREEN_SEEK_STEP) <= SEEK_MATCH_TOLERANCE) return 'next';
-  if (Math.abs(drift + LOCK_SCREEN_SEEK_STEP) <= SEEK_MATCH_TOLERANCE) return 'previous';
-  // Seeking back 10s within the first 10s of a song is clamped to 0.
-  if (expected < LOCK_SCREEN_SEEK_STEP && expected > 1.5 && lastProgress.time < 0.5) return 'previous';
-  return null;
-}
-
 function handleTrackFinished() {
-  const { sleep } = playerStore.getState();
-  if (sleep?.endOfTrack) {
-    playerStore.setState({ sleep: null });
-    player?.seekTo(0);
-    return;
-  }
   if (!settingsStore.getState().autoPlayNext) return;
 
   const next = Q.nextIndex(getQueue(), playerStore.getState().repeat);
@@ -464,17 +405,6 @@ function onPlaybackStatusUpdate(status) {
     return;
   }
 
-  const remoteSkip = detectLockScreenSkip(status);
-  if (remoteSkip === 'next') {
-    skipToNext();
-    return;
-  }
-  if (remoteSkip === 'previous') {
-    const prev = Q.previousIndex(getQueue(), 'all');
-    if (prev !== null) loadIndex(prev);
-    return;
-  }
-
   if (status.playing) consecutiveFailures = 0;
 
   // Listening stats.
@@ -496,7 +426,6 @@ function onPlaybackStatusUpdate(status) {
     if (!status.playing) persistSoon();
   }
 
-  checkSleepTimer();
 }
 
 function skipToNextAfterError() {

@@ -1,35 +1,29 @@
-/**
- * VinVibes — SongTile
- *
- * [Artwork]  Title            3:42  ⋮
- *            Artist
- *
- * The playing track gets a blue title + animated equalizer. Each tile
- * subscribes only to "am I the current track?", so playback progress
- * never re-renders long lists.
- */
-
-import React, { memo, useCallback } from 'react';
+import { memo, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../styles/theme';
 import { useStore } from '../core/store';
 import { formatTime } from '../core/format';
 import { playerStore } from '../player/playerService';
 import { favoritesStore } from '../services/userDataService';
-import { openSheet } from '../navigation/navigation';
+import { openSheet, openPlayer } from '../navigation/navigation';
 import Artwork from './Artwork';
 import IconButton from './IconButton';
 import PlayingIndicator from './PlayingIndicator';
 
 export const SONG_TILE_HEIGHT = 64;
+const ART_SIZE = 48;
 
 function SongTile({ track, index, onPress, showIndex = false, right, context }) {
-  // 0 = not current, 1 = current & paused, 2 = current & playing
   const state = useStore(playerStore, s => (s.currentId === track.id ? (s.isPlaying ? 2 : 1) : 0));
   const liked = useStore(favoritesStore, s => !!s.favorites[track.id]);
   const isCurrent = state > 0;
 
-  const handlePress = useCallback(() => onPress?.(track, index), [onPress, track, index]);
+
+  const handlePress = useCallback(() => {
+    if (isCurrent) openPlayer();
+    else onPress?.(track, index);
+  }, [isCurrent, onPress, track, index]);
   const openActions = useCallback(() => openSheet('songActions', { trackId: track.id, context }), [track.id, context]);
 
   return (
@@ -41,7 +35,7 @@ function SongTile({ track, index, onPress, showIndex = false, right, context }) 
       style={({ pressed }) => [styles.row, isCurrent && styles.rowActive, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={`${track.title} by ${track.artist}${isCurrent ? ', now playing' : ''}`}
-      accessibilityHint="Plays the song. Long press for more options."
+      accessibilityHint={isCurrent ? 'Opens the player.' : 'Plays the song. Long press for more options.'}
     >
       {showIndex ? (
         <View style={styles.indexCol}>
@@ -52,10 +46,11 @@ function SongTile({ track, index, onPress, showIndex = false, right, context }) 
           )}
         </View>
       ) : (
-        <View>
-          <Artwork uri={track.artwork} seed={track.album} size={48} />
+        <View style={styles.artBox}>
+          {/* While playing, the equalizer takes the place of the music note. */}
+          <Artwork uri={track.artwork} seed={track.album} size={ART_SIZE} icon={isCurrent ? null : undefined} />
           {isCurrent ? (
-            <View style={styles.artOverlay}>
+            <View style={[styles.artOverlay, track.artwork && styles.artOverlayDim]}>
               <PlayingIndicator playing={state === 2} color={COLORS.white} />
             </View>
           ) : null}
@@ -67,11 +62,16 @@ function SongTile({ track, index, onPress, showIndex = false, right, context }) 
           {track.title}
         </Text>
         <Text style={styles.subtitle} numberOfLines={1}>
-          {liked ? '♥ ' : ''}{track.artist}
+          {track.artist}
         </Text>
       </View>
 
       {right ?? <Text style={styles.duration}>{formatTime(track.duration)}</Text>}
+
+      {/* Favorite marker only — favorite/unfavorite from the ⋮ menu or player. */}
+      {liked ? (
+        <Ionicons name="heart" size={15} color={COLORS.accentLight} style={styles.liked} accessibilityLabel="Favorite" />
+      ) : null}
 
       <IconButton
         icon="ellipsis-vertical"
@@ -108,12 +108,25 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontVariant: ['tabular-nums'],
   },
+  artBox: {
+    width: ART_SIZE,
+    height: ART_SIZE,
+  },
   artOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: ART_SIZE,
+    height: ART_SIZE,
     borderRadius: 8,
-    backgroundColor: 'rgba(5,7,10,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  artOverlayDim: {
+    backgroundColor: 'rgba(5,7,10,0.55)',
+  },
+  liked: {
+    marginLeft: 2,
   },
   info: {
     flex: 1,

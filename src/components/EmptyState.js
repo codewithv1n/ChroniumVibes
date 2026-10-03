@@ -1,8 +1,4 @@
-/**
- * VinVibes — Empty state with icon, message and optional action.
- */
-
-import React, { memo } from 'react';
+import { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';

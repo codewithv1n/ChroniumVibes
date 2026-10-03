@@ -1,8 +1,8 @@
 /**
  * VinVibes — Search
  *
- * Instant local search across songs, artists, albums, playlists and
- * folders. Text is normalized once per library change; queries are
+ * Instant local search across songs (title, artist, album), playlists
+ * and folders. Text is normalized once per library change; queries are
  * debounced so typing stays smooth with thousands of songs.
  */
 
@@ -23,12 +23,12 @@ import {
 import { playTracks } from '../player/playerService';
 import { navigate } from '../navigation/navigation';
 import SongTile from '../components/SongTile';
-import Artwork, { CollageArtwork } from '../components/Artwork';
+import { CollageArtwork } from '../components/Artwork';
 import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
 
 const DEBOUNCE_MS = 150;
-const LIMITS = { songs: 30, artists: 8, albums: 8, playlists: 6, folders: 6 };
+const LIMITS = { songs: 40, playlists: 6, folders: 6 };
 
 /** Rank: exact > starts with > word starts with > contains. */
 function score(text, query) {
@@ -60,8 +60,6 @@ function ResultRow({ artwork, title, subtitle, onPress, label }) {
 
 export default function SearchScreen() {
   const tracks = useStore(libraryStore, s => s.tracks);
-  const albums = useStore(libraryStore, s => s.albums);
-  const artists = useStore(libraryStore, s => s.artists);
   const folders = useStore(libraryStore, s => s.folders);
   const byId = useStore(libraryStore, s => s.byId);
   const playlists = useStore(playlistsStore, s => s.playlists);
@@ -100,12 +98,10 @@ export default function SearchScreen() {
 
     return {
       songs,
-      artists: match(artists, a => a.name).slice(0, LIMITS.artists),
-      albums: match(albums, a => `${a.name} ${a.artist}`).slice(0, LIMITS.albums),
       playlists: match(playlists, p => p.name).slice(0, LIMITS.playlists),
       folders: match(folders.filter(f => !f.excluded), f => f.name).slice(0, LIMITS.folders),
     };
-  }, [query, index, artists, albums, playlists, folders]);
+  }, [query, index, playlists, folders]);
 
   const remember = () => addRecentSearch(input);
 
@@ -113,8 +109,6 @@ export default function SearchScreen() {
     if (!results) return [];
     const out = [];
     if (results.songs.length) out.push({ key: 'songs', title: 'Songs', data: results.songs });
-    if (results.artists.length) out.push({ key: 'artists', title: 'Artists', data: results.artists });
-    if (results.albums.length) out.push({ key: 'albums', title: 'Albums', data: results.albums });
     if (results.playlists.length) out.push({ key: 'playlists', title: 'Playlists', data: results.playlists });
     if (results.folders.length) out.push({ key: 'folders', title: 'Folders', data: results.folders });
     return out;
@@ -131,26 +125,6 @@ export default function SearchScreen() {
               remember();
               playTracks(results.songs.map(t => t.id), i);
             }}
-          />
-        );
-      case 'artists':
-        return (
-          <ResultRow
-            label={`Artist ${item.name}`}
-            artwork={<Artwork uri={item.artwork} seed={item.name} size={48} round icon="person" />}
-            title={item.name}
-            subtitle={`Artist · ${pluralize(item.trackIds.length, 'song')}`}
-            onPress={() => { remember(); navigate('artist', { artistId: item.id }); }}
-          />
-        );
-      case 'albums':
-        return (
-          <ResultRow
-            label={`Album ${item.name}`}
-            artwork={<Artwork uri={item.artwork} seed={item.name} size={48} icon="disc" />}
-            title={item.name}
-            subtitle={`Album · ${item.artist}`}
-            onPress={() => { remember(); navigate('album', { albumId: item.id }); }}
           />
         );
       case 'playlists':
@@ -186,7 +160,7 @@ export default function SearchScreen() {
           style={styles.input}
           value={input}
           onChangeText={setInput}
-          placeholder="Songs, artists, albums, playlists, folders"
+          placeholder="Songs, artists, playlists, folders"
           placeholderTextColor={COLORS.textMuted}
           returnKeyType="search"
           onSubmitEditing={remember}
@@ -226,14 +200,14 @@ export default function SearchScreen() {
           <EmptyState
             icon="search"
             title="Search your library"
-            message="Find any song, artist, album, playlist or folder on this device."
+            message="Find any song, playlist or folder on this device."
           />
         )
       ) : sections.length === 0 ? (
         <EmptyState
           icon="sad-outline"
           title={`No results for "${input.trim()}"`}
-          message="No songs, artists, albums, or playlists matched your search."
+          message="No songs, playlists, or folders matched your search."
         />
       ) : (
         <SectionList

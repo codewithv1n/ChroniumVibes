@@ -16,7 +16,6 @@ export const DEFAULT_SETTINGS = {
   // Hides ringtones, notification sounds and short voice notes.
   minDurationSeconds: 30,
   songSort: { key: 'title', ascending: true },
-  libraryGrid: true,
 };
 
 export const settingsStore = createStore({ ...DEFAULT_SETTINGS });

@@ -118,7 +118,7 @@ export function LyricsSheet({ trackId }) {
   // Strip LRC timestamps like [01:23.45] if the embedded lyrics are synced.
   const text = lyrics ? lyrics.replace(/\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g, '').trim() : null;
   return (
-    <BottomSheet title="Lyrics" maxHeight="90%">
+    <BottomSheet title="Lyrics" maxHeight={0.9}>
       <ScrollView contentContainerStyle={styles.lyricsBody}>
         {track ? <Text style={styles.lyricsTrack}>{track.title} · {track.artist}</Text> : null}
         <Text style={text ? styles.lyrics : styles.message}>

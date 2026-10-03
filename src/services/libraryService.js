@@ -7,7 +7,7 @@
  *  3. Diff against the cache: only NEW or MODIFIED files get their tags
  *     read; deleted files are dropped. Work is chunked so the UI stays
  *     responsive, and progress is published to the store.
- *  4. Derive albums, artists and folders; apply folder exclusions,
+ *  4. Derive folders; apply folder exclusions,
  *     the minimum-duration filter and duplicate removal.
  *
  * Uses `expo-media-library/legacy`: in SDK 57 the old functions on the
@@ -41,8 +41,6 @@ export const libraryStore = createStore({
   allTracks: [], // every indexed track (before exclusions)
   tracks: [], // visible library
   byId: new Map(),
-  albums: [],
-  artists: [],
   folders: [], // all folders, including excluded ones
   duplicatesHidden: 0,
   lastScan: 0,
@@ -52,6 +50,14 @@ export const libraryStore = createStore({
 let scanPromise = null;
 
 // ── Permissions ───────────────────────────────────────────────
+
+/**
+ * Expo Go doesn't declare READ_MEDIA_AUDIO in its manifest, so audio
+ * access can never be granted there — only in a real (EAS/dev) build.
+ */
+function permissionErrorState(error) {
+  return /not declared in AndroidManifest/i.test(error?.message || '') ? 'unsupported' : 'denied';
+}
 
 function toPermissionState(response) {
   if (response?.granted || response?.status === 'granted') return 'granted';
@@ -66,9 +72,10 @@ export async function checkPermission() {
     libraryStore.setState({ permission });
     return permission;
   } catch (error) {
-    console.error('Permission check failed:', error);
-    libraryStore.setState({ permission: 'denied' });
-    return 'denied';
+    const permission = permissionErrorState(error);
+    if (permission !== 'unsupported') console.error('Permission check failed:', error);
+    libraryStore.setState({ permission });
+    return permission;
   }
 }
 
@@ -79,9 +86,10 @@ export async function requestPermission() {
     libraryStore.setState({ permission });
     return permission;
   } catch (error) {
-    console.error('Permission request failed:', error);
-    libraryStore.setState({ permission: 'denied' });
-    return 'denied';
+    const permission = permissionErrorState(error);
+    if (permission !== 'unsupported') console.error('Permission request failed:', error);
+    libraryStore.setState({ permission });
+    return permission;
   }
 }
 
@@ -114,10 +122,6 @@ export function prettyFolderPath(folderPath = '') {
 function albumKey(album, artist) {
   return `${normalizeText(artist)}|${normalizeText(album)}`;
 }
-
-/** Id of the album / artist collection a track belongs to. */
-export const albumIdFor = track => albumKey(track.album, track.albumArtist);
-export const artistIdFor = track => normalizeText(track.artist);
 
 function hashString(text) {
   let hash = 5381;
@@ -206,50 +210,6 @@ function removeDuplicates(tracks) {
   return { tracks: result, hidden };
 }
 
-function buildCollections(tracks) {
-  const albumMap = new Map();
-  const artistMap = new Map();
-
-  for (const track of tracks) {
-    const aKey = albumKey(track.album, track.albumArtist);
-    let album = albumMap.get(aKey);
-    if (!album) {
-      album = {
-        id: aKey,
-        name: track.album,
-        artist: track.albumArtist,
-        artwork: null,
-        year: 0,
-        trackIds: [],
-        duration: 0,
-      };
-      albumMap.set(aKey, album);
-    }
-    album.trackIds.push(track.id);
-    album.duration += track.duration;
-    if (!album.artwork && track.artwork) album.artwork = track.artwork;
-    if (!album.year && track.year) album.year = track.year;
-
-    const rKey = normalizeText(track.artist);
-    let artist = artistMap.get(rKey);
-    if (!artist) {
-      artist = { id: rKey, name: track.artist, artwork: null, trackIds: [], albumIds: new Set(), duration: 0 };
-      artistMap.set(rKey, artist);
-    }
-    artist.trackIds.push(track.id);
-    artist.albumIds.add(aKey);
-    artist.duration += track.duration;
-    if (!artist.artwork && track.artwork) artist.artwork = track.artwork;
-  }
-
-  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-  const albums = [...albumMap.values()].sort(byName);
-  const artists = [...artistMap.values()]
-    .map(a => ({ ...a, albumIds: [...a.albumIds] }))
-    .sort(byName);
-  return { albums, artists };
-}
-
 function buildFolders(allTracks, excluded) {
   const map = new Map();
   for (const track of allTracks) {
@@ -276,14 +236,11 @@ export function applyLibraryFilters(allTracks = libraryStore.getState().allTrack
     t => !excluded.has(t.folder) && (t.duration === 0 || t.duration >= minDuration)
   );
   const { tracks, hidden } = removeDuplicates(visible);
-  const { albums, artists } = buildCollections(tracks);
 
   libraryStore.setState({
     allTracks,
     tracks,
     byId: new Map(tracks.map(t => [t.id, t])),
-    albums,
-    artists,
     folders: buildFolders(allTracks, excluded),
     duplicatesHidden: hidden,
   });
@@ -335,7 +292,7 @@ export function scanLibrary({ full = false } = {}) {
 async function runScan(full) {
   const permission = await checkPermission();
   if (permission !== 'granted') {
-    const requested = permission === 'blocked' ? permission : await requestPermission();
+    const requested = permission === 'blocked' || permission === 'unsupported' ? permission : await requestPermission();
     if (requested !== 'granted') {
       libraryStore.setState({ status: libraryStore.getState().allTracks.length ? 'ready' : 'idle' });
       return null;

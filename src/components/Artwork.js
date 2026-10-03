@@ -32,7 +32,7 @@ function Artwork({ uri, seed = '', size = 48, radius = RADIUS.sm, icon = 'musica
   const [from, to] = placeholderColors(seed);
   return (
     <LinearGradient colors={[from, to]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[box, styles.placeholder, style]}>
-      <Ionicons name={icon} size={Math.max(16, size * 0.36)} color="rgba(255,255,255,0.75)" />
+      {icon ? <Ionicons name={icon} size={Math.max(16, size * 0.36)} color="rgba(255,255,255,0.75)" /> : null}
     </LinearGradient>
   );
 }
