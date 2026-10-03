@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ChroniumVibes",
-    "slug": "ChroniumVibes",
+    "name": "VinVibes",
+    "slug": "VinVibes",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,35 +21,53 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.codewithv1n.ChroniumVibes",
+      "package": "com.codewithv1n.vinvibes",
       "permissions": [
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "WAKE_LOCK",
-        "READ_EXTERNAL_STORAGE",
-        "READ_MEDIA_AUDIO"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WAKE_LOCK",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+      ],
+      "blockedPermissions": [
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
       [
         "expo-media-library",
         {
-          "isAccessMediaLocationEnabled": true,
-          "isAudioEnabled": true,
-          "photosPermission": "Allow ChroniumVibes to access your photos.",
-          "savePhotosPermission": "Allow ChroniumVibes to save photos.",
-          "androidPermissions": [
-            "READ_MEDIA_AUDIO",
-            "READ_EXTERNAL_STORAGE"
-          ]
+          "granularPermissions": [
+            "audio"
+          ],
+          "isAccessMediaLocationEnabled": false
         }
       ],
       "expo-font",
-      "expo-build-properties"
+      "expo-build-properties",
+      "expo-status-bar",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-asset"
     ],
+    "owner": "codewithv1n",
     "extra": {
       "eas": {
-        "projectId": "6228a58e-0870-43b7-aafa-701089311019"
+        "projectId": "1c5459a0-400c-48ce-b5aa-6ece63a8b8d5"
       }
     }
   }

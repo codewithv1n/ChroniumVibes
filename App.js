@@ -1,558 +1,316 @@
 /**
- * ChroniumVibes — Main App Component
- * 
- * Tab-based navigation: Songs (default) | Now Playing | Playlists.
- * Scans downloaded music, manages playback, and supports playlists.
- * Black & white monochrome theme.
+ * VinVibes — App shell
+ *
+ * Boot order:
+ *   1. storage migrations → user data → audio engine
+ *   2. cached library index (instant) → restore last queue
+ *   3. incremental MediaStore scan in the background
+ *
+ * Layout: tab stacks (Home / Search / Library) · mini player · tab bar,
+ * with the full player, queue, sheets and toasts as overlays.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  StatusBar,
-  ActivityIndicator,
-  SafeAreaView,
-  TouchableOpacity,
-  Platform,
-} from 'react-native';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { View, Text, Animated, AppState, BackHandler, StyleSheet } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-// ── Audio Engine & Scanner ──────────────────────────────────
-import { scanLocalTracks } from './src/player/localTracks';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SIZES } from './src/styles/theme';
+import { useStore } from './src/core/store';
+import { runMigrations } from './src/core/storage';
+import { showToast } from './src/core/toast';
+import { pluralize } from './src/core/format';
 import {
-  initAudioEngine,
-  setPlaylist,
-  getCurrentTrack,
-  setStatusListener,
-  togglePlayPause,
-  skipToNext,
-  skipToPrevious,
-  seekTo,
-  playTrackAtIndex,
-  getPlaylist,
-} from './src/player/soundManager';
+  libraryStore,
+  loadCachedLibrary,
+  scanLibrary,
+  checkPermission,
+  requestPermission,
+  openAppSettings,
+} from './src/services/libraryService';
+import { initUserData, flushUserData, settingsStore } from './src/services/userDataService';
+import { initPlayer, restorePlaybackState, playerStore } from './src/player/playerService';
+import { navStore, handleBackPress, TABS } from './src/navigation/navigation';
 
-// ── UI Components ───────────────────────────────────────────
-import TrackInfo from './src/components/TrackInfo';
-import ProgressBar from './src/components/ProgressBar';
-import PlayerControls from './src/components/PlayerControls';
-import TrackList from './src/components/TrackList';
-import PlaylistManager from './src/components/PlaylistManager';
-import AddToPlaylistModal from './src/components/AddToPlaylistModal';
+import HomeScreen from './src/screens/HomeScreen';
+import SearchScreen from './src/screens/SearchScreen';
+import LibraryScreen from './src/screens/LibraryScreen';
+import { AlbumScreen, ArtistScreen, PlaylistScreen, ListScreen } from './src/screens/CollectionScreen';
+import { SettingsScreen, FoldersScreen } from './src/screens/SettingsScreen';
+import NowPlayingScreen from './src/screens/NowPlayingScreen';
+import QueueScreen from './src/screens/QueueScreen';
 
-// ── Design Tokens ───────────────────────────────────────────
-import { COLORS, SPACING, SIZES } from './src/styles/theme';
+import MiniPlayer from './src/components/MiniPlayer';
+import TabBar from './src/components/TabBar';
+import Toast from './src/components/Toast';
+import SheetHost from './src/components/sheets/SheetHost';
+import EmptyState from './src/components/EmptyState';
+import LoadingState from './src/components/LoadingState';
 
-const TABS = {
-  SONGS: 'songs',
-  PLAYING: 'playing',
-  PLAYLISTS: 'playlists',
+const ROOTS = { home: HomeScreen, search: SearchScreen, library: LibraryScreen };
+
+const ROUTES = {
+  album: ({ albumId }) => <AlbumScreen albumId={albumId} />,
+  artist: ({ artistId }) => <ArtistScreen artistId={artistId} />,
+  playlist: ({ playlistId, openAddSongs }) => <PlaylistScreen playlistId={playlistId} openAddSongs={openAddSongs} />,
+  collection: params => <ListScreen {...params} />,
+  settings: () => <SettingsScreen />,
+  folders: () => <FoldersScreen />,
 };
 
-export default function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasPermission, setHasPermission] = useState(true);
-  const [allTracks, setAllTracks] = useState([]);
-  const [currentTrack, setCurrentTrackState] = useState(null);
+let booted = false;
 
-  // Playback state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [error, setError] = useState(null);
+async function boot() {
+  if (booted) return;
+  booted = true;
+  await runMigrations();
+  await initUserData();
+  await initPlayer();
 
-  // Navigation
-  const [activeTab, setActiveTab] = useState(TABS.SONGS);
+  const cachedCount = loadCachedLibrary();
+  if (cachedCount > 0) await restorePlaybackState();
 
-  // Add to Playlist modal
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedTrackForPlaylist, setSelectedTrackForPlaylist] = useState(null);
+  const permission = await checkPermission();
+  if (permission !== 'granted' && cachedCount === 0) return; // permission screen takes over
+  await runScan({ announce: cachedCount === 0 });
+  if (cachedCount === 0) await restorePlaybackState();
+}
 
-  // Playlist refresh trigger
-  const [playlistRefreshKey, setPlaylistRefreshKey] = useState(0);
+async function runScan({ announce }) {
+  const result = await scanLibrary();
+  if (!result) return;
+  if (announce && result.total > 0) {
+    showToast(`${pluralize(result.total, 'song')} found`, { icon: 'musical-notes' });
+  } else if (result.added > 0) {
+    showToast(`${pluralize(result.added, 'new song')} added`, { icon: 'musical-notes' });
+  }
+}
 
-  // ── Load local tracks from device storage ──────────────────
-  const loadMusic = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await initAudioEngine();
+/** Fades/slides a pushed screen in. */
+function ScreenTransition({ children, animate }) {
+  const progress = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  useEffect(() => {
+    if (!animate) return;
+    Animated.timing(progress, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+  }, [animate, progress]);
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFill,
+        styles.screen,
+        {
+          opacity: progress,
+          transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
-      const { granted, tracks } = await scanLocalTracks();
-      setHasPermission(granted);
+/**
+ * Every tab keeps its root and pushed screens mounted (hidden when not on
+ * top) so scroll positions survive tab switches and going back.
+ */
+function TabStacks() {
+  const tab = useStore(navStore, s => s.tab);
+  const stacks = useStore(navStore, s => s.stacks);
+  const animationsOn = useStore(settingsStore, s => s.animations);
 
-      if (granted && tracks.length > 0) {
-        setPlaylist(tracks);
-        setAllTracks(tracks);
-        setCurrentTrackState(tracks[0]);
-        setDuration(tracks[0].duration || 0);
+  return (
+    <View style={styles.flex}>
+      {TABS.map(name => {
+        const Root = ROOTS[name];
+        const stack = stacks[name];
+        const tabVisible = name === tab;
+        return (
+          <View key={name} style={[StyleSheet.absoluteFill, !tabVisible && styles.hidden]}>
+            <View style={[StyleSheet.absoluteFill, stack.length > 0 && styles.hidden]}>
+              <Root />
+            </View>
+            {stack.map((route, i) => {
+              const render = ROUTES[route.name];
+              const onTop = i === stack.length - 1;
+              return (
+                <View key={route.key} style={[StyleSheet.absoluteFill, !onTop && styles.hidden]}>
+                  <ScreenTransition animate={animationsOn}>
+                    {render ? render(route.params) : null}
+                  </ScreenTransition>
+                </View>
+              );
+            })}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
-        // Register playback status updates listener
-        setStatusListener(({ isPlaying, position, duration, isBuffering }) => {
-          setIsPlaying(isPlaying);
-          setPosition(position);
-          if (duration > 0) setDuration(duration);
-          setIsBuffering(isBuffering);
-          setCurrentTrackState(getCurrentTrack());
-        });
-      } else {
-        setPlaylist([]);
-        setAllTracks([]);
-        setCurrentTrackState(null);
-      }
-    } catch (err) {
-      console.error('Failed to load music:', err);
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
+function PermissionScreen({ permission }) {
+  const blocked = permission === 'blocked';
+  const onPress = async () => {
+    if (blocked) {
+      openAppSettings();
+      return;
+    }
+    const result = await requestPermission();
+    if (result === 'granted') {
+      await runScan({ announce: true });
+      await restorePlaybackState();
+    }
+  };
+  return (
+    <View style={styles.center}>
+      <EmptyState
+        icon="folder-open-outline"
+        title={blocked ? 'Allow access in Settings' : 'Find the music on your phone'}
+        message={
+          blocked
+            ? 'Music access was turned off for VinVibes. Open Settings › Permissions › Music and audio, then choose Allow.'
+            : 'VinVibes needs permission to read the audio files saved on this device. Your music never leaves your phone.'
+        }
+        actionLabel={blocked ? 'Open Settings' : 'Allow access'}
+        onAction={onPress}
+      />
+    </View>
+  );
+}
+
+function Shell() {
+  const insets = useSafeAreaInsets();
+  const status = useStore(libraryStore, s => s.status);
+  const permission = useStore(libraryStore, s => s.permission);
+  const progress = useStore(libraryStore, s => s.progress);
+  const trackCount = useStore(libraryStore, s => s.tracks.length);
+  const hasAnyIndexed = useStore(libraryStore, s => s.allTracks.length > 0);
+  const hasCurrent = useStore(playerStore, s => !!s.currentId);
+
+  useEffect(() => {
+    boot();
+  }, []);
+
+  // Android back: close sheet → queue → player → pop screen → Home.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => sub.remove();
+  }, []);
+
+  // Save state when leaving; re-check permission when returning (e.g. from
+  // system Settings after granting access).
+  const onAppStateChange = useCallback(async (state) => {
+    if (state !== 'active') {
+      flushUserData();
+      return;
+    }
+    const before = libraryStore.getState().permission;
+    const now = await checkPermission();
+    if (now === 'granted' && before !== 'granted') {
+      await runScan({ announce: true });
+      await restorePlaybackState();
     }
   }, []);
 
   useEffect(() => {
-    loadMusic();
-  }, [loadMusic]);
+    const sub = AppState.addEventListener('change', onAppStateChange);
+    return () => sub.remove();
+  }, [onAppStateChange]);
 
-  // ── Handle track press from list ───────────────────────────
-  const handleTrackPress = useCallback(async (index) => {
-    // Make sure we're playing from all tracks
-    const currentPlaylist = getPlaylist();
-    if (currentPlaylist !== allTracks && allTracks.length > 0) {
-      setPlaylist(allTracks);
-    }
-    await playTrackAtIndex(index);
-    setActiveTab(TABS.PLAYING);
-  }, [allTracks]);
-
-  // ── Handle add to playlist ─────────────────────────────────
-  const handleAddToPlaylist = useCallback((track) => {
-    setSelectedTrackForPlaylist(track);
-    setModalVisible(true);
-  }, []);
-
-  // ── Handle play playlist ───────────────────────────────────
-  const handlePlayPlaylist = useCallback(async (tracks) => {
-    if (tracks.length === 0) return;
-    setPlaylist(tracks);
-    await playTrackAtIndex(0);
-    setActiveTab(TABS.PLAYING);
-  }, []);
-
-  // ── Loading Screen ─────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.bgDeep} />
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={COLORS.white} />
-          <Text style={styles.loadingText}>Scanning for music...</Text>
-        </View>
+  let body;
+  if (!hasAnyIndexed && (permission === 'denied' || permission === 'blocked')) {
+    body = <PermissionScreen permission={permission} />;
+  } else if (!hasAnyIndexed && (status === 'idle' || status === 'loading')) {
+    body = <LoadingState message="Scanning device..." progress={progress} />;
+  } else if (status === 'error' && !hasAnyIndexed) {
+    body = (
+      <View style={styles.center}>
+        <EmptyState icon="warning-outline" title="Couldn't read your music" message="Something went wrong while scanning. Please try again."
+          actionLabel="Try again" onAction={() => runScan({ announce: true })} />
       </View>
     );
-  }
-
-  // ── Permission Denied or No Tracks ─────────────────────────
-  if (!hasPermission || allTracks.length === 0 || error) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.bgDeep} />
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Ionicons
-              name={!hasPermission ? 'folder-open-outline' : 'musical-notes-outline'}
-              size={48}
-              color={COLORS.white}
-            />
-          </View>
-          <Text style={styles.emptyTitle}>
-            {!hasPermission
-              ? 'Storage Permission Needed'
-              : 'No Downloaded Music Found'}
-          </Text>
-          <Text style={styles.emptySubtitle}>
-            {!hasPermission
-              ? 'ChroniumVibes needs permission to read audio files on your phone.'
-              : 'Download some MP3 songs, then tap below to scan again.'}
-          </Text>
-
-          <TouchableOpacity
-            style={styles.scanButton}
-            onPress={loadMusic}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="refresh" size={18} color={COLORS.black} />
-            <Text style={styles.scanButtonText}>
-              {!hasPermission ? 'Grant Permission' : 'Scan Again'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+  } else if (trackCount === 0) {
+    body = (
+      <View style={styles.center}>
+        <EmptyState
+          icon="musical-notes-outline"
+          title="No music found"
+          message={hasAnyIndexed
+            ? 'All your audio is hidden by folder or length filters. Check Settings › Library.'
+            : 'No music was found on this device. Download or copy some songs, then scan again.'}
+          actionLabel="Scan device"
+          onAction={() => runScan({ announce: true })}
+        />
+      </View>
     );
+  } else {
+    body = <TabStacks />;
   }
-
-  // ── Render Active Tab Content ──────────────────────────────
-  const renderContent = () => {
-    switch (activeTab) {
-      case TABS.SONGS:
-        return (
-          <TrackList
-            tracks={allTracks}
-            currentTrackId={currentTrack?.id}
-            isPlaying={isPlaying}
-            onTrackPress={handleTrackPress}
-            onAddToPlaylist={handleAddToPlaylist}
-          />
-        );
-
-      case TABS.PLAYING:
-        return (
-          <View style={styles.nowPlayingContainer}>
-            <View style={styles.trackSection}>
-              <TrackInfo track={currentTrack} />
-            </View>
-            <View style={styles.controlsSection}>
-              <View style={styles.controlsCard}>
-                <ProgressBar
-                  position={position}
-                  duration={duration}
-                  onSeek={seekTo}
-                />
-                <PlayerControls
-                  isPlaying={isPlaying}
-                  isBuffering={isBuffering}
-                  onTogglePlayPause={togglePlayPause}
-                  onSkipNext={skipToNext}
-                  onSkipPrevious={skipToPrevious}
-                />
-              </View>
-            </View>
-          </View>
-        );
-
-      case TABS.PLAYLISTS:
-        return (
-          <PlaylistManager
-            onPlayPlaylist={handlePlayPlaylist}
-            onRefresh={playlistRefreshKey}
-          />
-        );
-
-      default:
-        return null;
-    }
-  };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bgDeep} />
-
-      <View style={styles.container}>
-        {/* ── App Header ─────────────────────────────────────── */}
-        <View style={styles.header}>
-          <Text style={styles.appTitle}>CHRONIUM VIBES</Text>
-          {activeTab === TABS.SONGS && (
-            <Text style={styles.headerSubtitle}>
-              {allTracks.length} {allTracks.length === 1 ? 'SONG' : 'SONGS'}
-            </Text>
-          )}
-        </View>
-
-        {/* ── Screen Content ──────────────────────────────────── */}
-        <View style={styles.content}>
-          {renderContent()}
-        </View>
-
-        {/* ── Mini Player (visible when not on Now Playing tab) ── */}
-        {currentTrack && activeTab !== TABS.PLAYING && (
-          <TouchableOpacity
-            style={styles.miniPlayer}
-            onPress={() => setActiveTab(TABS.PLAYING)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.miniPlayerIcon}>
-              <Ionicons name="musical-note" size={18} color={COLORS.white} />
-            </View>
-            <View style={styles.miniPlayerInfo}>
-              <Text style={styles.miniPlayerTitle} numberOfLines={1}>
-                {currentTrack.title}
-              </Text>
-              <Text style={styles.miniPlayerArtist} numberOfLines={1}>
-                {currentTrack.artist}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation?.();
-                togglePlayPause();
-              }}
-              style={styles.miniPlayBtn}
-            >
-              <Ionicons
-                name={isPlaying ? 'pause' : 'play'}
-                size={20}
-                color={COLORS.white}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation?.();
-                skipToNext();
-              }}
-              style={styles.miniSkipBtn}
-            >
-              <Ionicons name="play-skip-forward" size={18} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        )}
-
-        {/* ── Bottom Tab Bar ──────────────────────────────────── */}
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={styles.tab}
-            onPress={() => setActiveTab(TABS.SONGS)}
-          >
-            <Ionicons
-              name={activeTab === TABS.SONGS ? 'musical-notes' : 'musical-notes-outline'}
-              size={22}
-              color={activeTab === TABS.SONGS ? COLORS.white : COLORS.textMuted}
-            />
-            <Text style={[
-              styles.tabLabel,
-              activeTab === TABS.SONGS && styles.tabLabelActive,
-            ]}>
-              Songs
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tab}
-            onPress={() => setActiveTab(TABS.PLAYING)}
-          >
-            <Ionicons
-              name={activeTab === TABS.PLAYING ? 'play-circle' : 'play-circle-outline'}
-              size={22}
-              color={activeTab === TABS.PLAYING ? COLORS.white : COLORS.textMuted}
-            />
-            <Text style={[
-              styles.tabLabel,
-              activeTab === TABS.PLAYING && styles.tabLabelActive,
-            ]}>
-              Playing
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tab}
-            onPress={() => setActiveTab(TABS.PLAYLISTS)}
-          >
-            <Ionicons
-              name={activeTab === TABS.PLAYLISTS ? 'list' : 'list-outline'}
-              size={22}
-              color={activeTab === TABS.PLAYLISTS ? COLORS.white : COLORS.textMuted}
-            />
-            <Text style={[
-              styles.tabLabel,
-              activeTab === TABS.PLAYLISTS && styles.tabLabelActive,
-            ]}>
-              Playlists
-            </Text>
-          </TouchableOpacity>
-        </View>
+    <View style={styles.app}>
+      <StatusBar style="light" />
+      <View style={[styles.flex, { paddingTop: insets.top }]}>
+        {body}
+        {status === 'scanning' && progress ? (
+          <View style={styles.scanBanner} pointerEvents="none">
+            <Ionicons name="sync" size={14} color={COLORS.accentLight} />
+            <Text style={styles.scanText}>Updating library {progress.done}/{progress.total}</Text>
+          </View>
+        ) : null}
       </View>
+      {hasCurrent && trackCount > 0 ? <MiniPlayer /> : null}
+      <TabBar />
+      <Toast bottomOffset={insets.bottom + SIZES.tabBarHeight + (hasCurrent ? SIZES.miniPlayerHeight + 16 : 12)} />
+      <NowPlayingScreen />
+      <QueueScreen />
+      <SheetHost />
+    </View>
+  );
+}
 
-      {/* ── Add to Playlist Modal ──────────────────────────────── */}
-      <AddToPlaylistModal
-        visible={modalVisible}
-        track={selectedTrackForPlaylist}
-        onClose={() => {
-          setModalVisible(false);
-          setSelectedTrackForPlaylist(null);
-        }}
-        onAdded={() => setPlaylistRefreshKey(k => k + 1)}
-      />
-    </SafeAreaView>
+export default function App() {
+  return (
+    <SafeAreaProvider style={styles.app}>
+      <Shell />
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  app: {
     flex: 1,
     backgroundColor: COLORS.bgDeep,
   },
-  container: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 4 : 4,
-  },
-  header: {
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.divider,
-  },
-  appTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 3,
-    color: COLORS.white,
-  },
-  headerSubtitle: {
-    fontSize: 11,
-    letterSpacing: 2,
-    color: COLORS.textMuted,
-    marginTop: 4,
-  },
-  content: {
+  flex: {
     flex: 1,
   },
-
-  // ── Now Playing ─────────────────────────────────────
-  nowPlayingContainer: {
-    flex: 1,
+  screen: {
+    backgroundColor: COLORS.bgDeep,
   },
-  trackSection: {
+  hidden: {
+    display: 'none',
+  },
+  center: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  controlsSection: {
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.sm,
-  },
-  controlsCard: {
-    backgroundColor: COLORS.bgOverlay,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.xs,
-  },
-
-  // ── Mini Player ─────────────────────────────────────
-  miniPlayer: {
+  scanBanner: {
+    position: 'absolute',
+    top: SPACING.sm,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.bgCard,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.border,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 10,
-    gap: SPACING.sm,
-  },
-  miniPlayerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.round,
     backgroundColor: COLORS.bgCardHover,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  miniPlayerInfo: {
-    flex: 1,
-  },
-  miniPlayerTitle: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  miniPlayerArtist: {
-    color: COLORS.textMuted,
+  scanText: {
+    ...TYPOGRAPHY.caption,
     fontSize: 12,
-    marginTop: 1,
-  },
-  miniPlayBtn: {
-    padding: 6,
-  },
-  miniSkipBtn: {
-    padding: 6,
-  },
-
-  // ── Tab Bar ─────────────────────────────────────────
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.bgCard,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.border,
-    height: SIZES.tabBarHeight,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    letterSpacing: 0.5,
-    color: COLORS.textMuted,
-  },
-  tabLabelActive: {
-    color: COLORS.white,
-  },
-
-  // ── Loading ─────────────────────────────────────────
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.bgDeep,
-  },
-  loadingBox: {
-    alignItems: 'center',
-    gap: SPACING.md,
-  },
-  loadingText: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-
-  // ── Empty State ─────────────────────────────────────
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.xl,
-  },
-  emptyIconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: COLORS.bgCard,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.white,
-    textAlign: 'center',
-    marginBottom: SPACING.sm,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: SPACING.xl,
-  },
-  scanButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.white,
-    paddingVertical: 14,
-    paddingHorizontal: SPACING.xl,
-    borderRadius: 30,
-  },
-  scanButtonText: {
-    color: COLORS.black,
-    fontWeight: '600',
-    fontSize: 15,
+    color: COLORS.textPrimary,
   },
 });
+
