@@ -13,7 +13,7 @@ import { View, Text, Pressable, Modal, Animated, PanResponder, StyleSheet, useWi
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY, placeholderColors } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, placeholderColors, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { showToast } from '../core/toast';
 import { libraryStore, UNKNOWN_ALBUM } from '../services/libraryService';
@@ -214,7 +214,7 @@ function PlayerSheet({ track }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: COLORS.bgDeep,
@@ -323,4 +323,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontVariant: ['tabular-nums'],
   },
-});
+}));

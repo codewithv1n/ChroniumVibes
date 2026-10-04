@@ -1,52 +1,91 @@
-/**
- * VinVibes — Design System
- *
- * Black + blue palette. Black/dark surfaces make up most of the UI;
- * blue is reserved for active states, progress, the playing track and
- * primary actions. Album artwork provides the rest of the color.
- */
+import { StyleSheet } from 'react-native';
+import { readJSONFile, writeJSONFile } from '../core/storage';
+import { createStore } from '../core/store';
 
-export const COLORS = {
-  // ── Background Layers ──────────────────────────────
-  bgDeep:      '#05070A',   // App background
-  bgPrimary:   '#0B1018',   // Secondary background
-  bgCard:      '#101722',   // Card / surface
-  bgCardHover: '#151E2B',   // Elevated surface
+const THEME_FILE = 'theme.json';
+
+const DARK = {
+  bgDeep:      '#05070A',   
+  bgPrimary:   '#0B1018',   
+  bgCard:      '#101722',   
+  bgCardHover: '#151E2B',   
   bgOverlay:   'rgba(11, 16, 24, 0.96)',
   scrim:       'rgba(0, 0, 0, 0.6)',
 
-  // ── Blue Accents ───────────────────────────────────
-  accent:      '#1677FF',   // Primary blue
-  accentLight: '#39A0FF',   // Bright accent blue
-  accentDark:  '#0757C8',   // Deep blue
+
+  accent:      '#1677FF',   
+  accentLight: '#39A0FF',   
+  accentDark:  '#0757C8',   
   accentGlow:  'rgba(22, 119, 255, 0.18)',
   accentSoft:  'rgba(22, 119, 255, 0.12)',
 
-  // ── Text Colors ───────────────────────────────────
+ 
   textPrimary:   '#FFFFFF',
   textSecondary: '#A9B4C3',
   textMuted:     '#687386',
 
-  // ── Progress Bar ──────────────────────────────────
+  
   progressTrack: 'rgba(255, 255, 255, 0.12)',
   progressFill:  '#1677FF',
   progressThumb: '#FFFFFF',
 
-  // ── Utility ───────────────────────────────────────
+  
   white:       '#FFFFFF',
   black:       '#000000',
   transparent: 'transparent',
   border:      'rgba(255, 255, 255, 0.08)',
   borderLight: 'rgba(255, 255, 255, 0.12)',
   divider:     'rgba(255, 255, 255, 0.06)',
+  toast:       '#1B2636',
 
-  // ── State Colors ──────────────────────────────────
+  
   activeRow:   'rgba(22, 119, 255, 0.08)',
   danger:      '#FF5A5F',
   favorite:    '#39A0FF',
 };
 
-export const TYPOGRAPHY = {
+
+const LIGHT = {
+  bgDeep:      '#F4F6FA',
+  bgPrimary:   '#EBEFF5',
+  bgCard:      '#FFFFFF',
+  bgCardHover: '#E3E9F1',
+  bgOverlay:   'rgba(255, 255, 255, 0.96)',
+  scrim:       'rgba(5, 7, 10, 0.4)',
+
+  accent:      '#1677FF',
+  accentLight: '#0E66E0',
+  accentDark:  '#0757C8',
+  accentGlow:  'rgba(22, 119, 255, 0.18)',
+  accentSoft:  'rgba(22, 119, 255, 0.12)',
+
+  textPrimary:   '#05070A',
+  textSecondary: '#4A5568',
+  textMuted:     '#7B8698',
+
+  progressTrack: 'rgba(5, 7, 10, 0.12)',
+  progressFill:  '#1677FF',
+  progressThumb: '#1677FF',
+
+  white:       '#FFFFFF',
+  black:       '#000000',
+  transparent: 'transparent',
+  border:      'rgba(5, 7, 10, 0.08)',
+  borderLight: 'rgba(5, 7, 10, 0.12)',
+  divider:     'rgba(5, 7, 10, 0.07)',
+  toast:       '#1B2636',
+
+  activeRow:   'rgba(22, 119, 255, 0.08)',
+  danger:      '#E5484D',
+  favorite:    '#0E66E0',
+};
+
+
+let currentMode = readJSONFile(THEME_FILE, {}).mode === 'light' ? 'light' : 'dark';
+export const themeStore = createStore({ mode: currentMode });
+export const COLORS = { ...(currentMode === 'light' ? LIGHT : DARK) };
+
+const buildTypography = () => ({
   display: {
     fontSize: 28,
     fontWeight: '800',
@@ -86,7 +125,30 @@ export const TYPOGRAPHY = {
     letterSpacing: 0.8,
     color: COLORS.textMuted,
   },
-};
+});
+
+export const TYPOGRAPHY = buildTypography();
+
+
+export function setThemeMode(mode) {
+  if (mode === currentMode) return;
+  currentMode = mode;
+  Object.assign(COLORS, mode === 'light' ? LIGHT : DARK);
+  Object.assign(TYPOGRAPHY, buildTypography());
+  writeJSONFile(THEME_FILE, { mode });
+  themeStore.setState({ mode });
+}
+
+
+export function themedStyles(factory) {
+  const sheets = {};
+  return new Proxy({}, {
+    get(_, key) {
+      if (!sheets[currentMode]) sheets[currentMode] = StyleSheet.create(factory());
+      return sheets[currentMode][key];
+    },
+  });
+}
 
 export const SPACING = {
   xs: 4,
@@ -115,25 +177,14 @@ export const SIZES = {
   miniPlayerHeight: 62,
 };
 
-/**
- * Deterministic placeholder colors so the same album/artist always gets
- * the same generated artwork.
- */
-const PLACEHOLDER_PALETTE = [
-  ['#0757C8', '#05070A'],
-  ['#1E3A5F', '#0B1018'],
-  ['#123B6B', '#05070A'],
-  ['#2A2F6B', '#0B1018'],
-  ['#0F4C5C', '#05070A'],
-  ['#3B2C6B', '#0B1018'],
-  ['#1D4E89', '#05070A'],
-  ['#20374F', '#0B1018'],
-];
+
+const PLACEHOLDER_TINTS = ['#0757C8', '#1E3A5F', '#123B6B', '#2A2F6B', '#0F4C5C', '#3B2C6B', '#1D4E89', '#20374F'];
 
 export function placeholderColors(seed = '') {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
     hash = (hash * 31 + seed.charCodeAt(i)) | 0;
   }
-  return PLACEHOLDER_PALETTE[Math.abs(hash) % PLACEHOLDER_PALETTE.length];
+  const index = Math.abs(hash) % PLACEHOLDER_TINTS.length;
+  return [PLACEHOLDER_TINTS[index], index % 2 === 0 ? COLORS.bgDeep : COLORS.bgPrimary];
 }

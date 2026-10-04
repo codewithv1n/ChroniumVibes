@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS, SPACING } from '../styles/theme';
+import { COLORS, SPACING, themedStyles } from '../styles/theme';
 import { goBack } from '../navigation/navigation';
 import IconButton from './IconButton';
 
@@ -18,7 +18,7 @@ export default function ScreenHeader({ title, right, onBack = goBack, transparen
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   header: {
     height: 52,
     flexDirection: 'row',
@@ -41,4 +41,4 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
-});
+}));

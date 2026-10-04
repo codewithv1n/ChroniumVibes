@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themedStyles } from '../styles/theme';
 
 function EmptyState({ icon = 'musical-notes-outline', title, message, actionLabel, onAction, compact = false }) {
   return (
@@ -24,7 +24,7 @@ function EmptyState({ icon = 'musical-notes-outline', title, message, actionLabe
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -73,6 +73,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
-});
+}));
 
 export default memo(EmptyState);

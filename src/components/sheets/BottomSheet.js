@@ -1,19 +1,11 @@
-/**
- * VinVibes — Bottom sheet base + action row.
- */
-
-import React, { useEffect, useState } from 'react';
-import { View, Text, Modal, Pressable, StyleSheet, Keyboard, Platform, useWindowDimensions } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, Modal, Pressable, Animated, PanResponder, StyleSheet, Keyboard, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themedStyles } from '../../styles/theme';
 import { closeSheet } from '../../navigation/navigation';
 
-/**
- * Current on-screen keyboard height. Inside a translucent (edge-to-edge)
- * Modal the window doesn't resize for the keyboard, so KeyboardAvoidingView
- * can't help; the sheet is lifted by this amount instead.
- */
+
 function useKeyboardHeight() {
   const [height, setHeight] = useState(0);
   useEffect(() => {
@@ -29,13 +21,33 @@ function useKeyboardHeight() {
   return height;
 }
 
+
+function useSwipeToClose(onClose) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => translateY.setValue(Math.max(0, g.dy)),
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 100 || g.vy > 1) onCloseRef.current();
+        else Animated.spring(translateY, { toValue: 0, useNativeDriver: false }).start();
+      },
+      onPanResponderTerminate: () => Animated.spring(translateY, { toValue: 0, useNativeDriver: false }).start(),
+    })
+  ).current;
+
+  return { translateY, panHandlers: pan.panHandlers };
+}
+
 export default function BottomSheet({ children, title, onClose = closeSheet, maxHeight = 0.85 }) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const keyboardHeight = useKeyboardHeight();
-
-  // Sit right on top of the keyboard while typing; otherwise clear the
-  // system navigation bar.
+  const { translateY, panHandlers } = useSwipeToClose(onClose);
   const bottomSpace = keyboardHeight > 0 ? keyboardHeight : insets.bottom;
   const availableHeight = windowHeight - bottomSpace - insets.top - SPACING.md;
   const sheetMaxHeight = Math.min(windowHeight * maxHeight, availableHeight);
@@ -50,18 +62,26 @@ export default function BottomSheet({ children, title, onClose = closeSheet, max
       onRequestClose={onClose}
     >
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button">
-        <Pressable
-          style={[styles.sheet, { maxHeight: sheetMaxHeight, marginBottom: keyboardHeight, paddingBottom: (keyboardHeight > 0 ? 0 : insets.bottom) + SPACING.md }]}
+        <AnimatedPressable
+          style={[
+            styles.sheet,
+            { maxHeight: sheetMaxHeight, marginBottom: keyboardHeight, paddingBottom: (keyboardHeight > 0 ? 0 : insets.bottom) + SPACING.md },
+            { transform: [{ translateY }] },
+          ]}
           onPress={() => {}}
         >
-          <View style={styles.handle} />
-          {title ? <Text style={styles.title} accessibilityRole="header">{title}</Text> : null}
+          <View style={styles.grip} {...panHandlers}>
+            <View style={styles.handle} />
+            {title ? <Text style={styles.title} accessibilityRole="header">{title}</Text> : null}
+          </View>
           {children}
-        </Pressable>
+        </AnimatedPressable>
       </Pressable>
     </Modal>
   );
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function SheetAction({ icon, label, onPress, active, destructive, right }) {
   const color = destructive ? COLORS.danger : active ? COLORS.accentLight : COLORS.textPrimary;
@@ -81,7 +101,7 @@ export function SheetAction({ icon, label, onPress, active, destructive, right }
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   backdrop: {
     flex: 1,
     backgroundColor: COLORS.scrim,
@@ -94,6 +114,9 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: COLORS.borderLight,
+  },
+  grip: {
+    paddingTop: SPACING.xs,
   },
   handle: {
     width: 36,
@@ -125,4 +148,4 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
-});
+}));

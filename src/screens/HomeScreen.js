@@ -5,12 +5,13 @@
  * library and local listening history.
  */
 
-import React, { useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, FlatList, StyleSheet } from 'react-native';
-import { SPACING, TYPOGRAPHY } from '../styles/theme';
+import React, { useMemo, useCallback, useState } from 'react';
+import { View, Text, ScrollView, FlatList, RefreshControl, StyleSheet } from 'react-native';
+import { COLORS, SPACING, TYPOGRAPHY, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { greeting, pluralize } from '../core/format';
-import { libraryStore } from '../services/libraryService';
+import { showToast } from '../core/toast';
+import { libraryStore, scanLibrary } from '../services/libraryService';
 import { statsStore, favoritesStore, playlistsStore, getFavoriteIds } from '../services/userDataService';
 import * as Rec from '../services/recommendations';
 import { playTracks } from '../player/playerService';
@@ -18,7 +19,7 @@ import { navigate, openLibraryView } from '../navigation/navigation';
 import SectionHeader from '../components/SectionHeader';
 import SongTile from '../components/SongTile';
 import IconButton from '../components/IconButton';
-import { TrackCard, PlaylistCard, QuickTile } from '../components/Cards';
+import { PlaylistCard, QuickTile } from '../components/Cards';
 
 function HorizontalRow({ data, renderItem, keyExtractor = item => item.id }) {
   return (
@@ -45,7 +46,6 @@ export default function HomeScreen() {
   const sections = useMemo(() => {
     return {
       picks: Rec.quickPicks(tracks, stats, favorites, 8),
-      rediscover: Rec.rediscover(tracks, stats, 10),
       favoriteIds: getFavoriteIds(favorites).filter(id => byId.has(id)),
     };
   }, [tracks, byId, stats, favorites]);
@@ -54,11 +54,37 @@ export default function HomeScreen() {
     playTracks(list.map(t => t.id), list.indexOf(track));
   }, []);
 
+  // Pull down to look for new songs on the device.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const result = await scanLibrary();
+      if (result) {
+        showToast(result.added > 0 ? `${pluralize(result.added, 'new song')} added` : 'No new songs', { icon: 'musical-notes' });
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   const openCollection = (type, params = {}) => navigate(type, params);
   const firstFavoriteArt = sections.favoriteIds.map(id => byId.get(id)?.artwork).find(Boolean);
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[COLORS.accent]}
+          tintColor={COLORS.accent}
+          progressBackgroundColor={COLORS.bgCard}
+        />
+      }
+    >
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.headerText}>
@@ -106,18 +132,11 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {sections.rediscover.length > 0 && (
-        <View style={styles.section}>
-          <SectionHeader title="Rediscover" subtitle="Not played in a while" />
-          <HorizontalRow data={sections.rediscover} renderItem={({ item }) => <TrackCard track={item} onPress={playSingleFrom(sections.rediscover)} />} />
-        </View>
-      )}
-
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   content: {
     paddingBottom: SPACING.xl,
   },
@@ -154,5 +173,5 @@ const styles = StyleSheet.create({
   rowContent: {
     paddingHorizontal: SPACING.md,
   },
-});
+}));
 

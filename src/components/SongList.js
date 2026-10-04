@@ -52,7 +52,6 @@ export default function SongList({
       data={tracks}
       keyExtractor={(item, index) => `${item.id}:${index}`}
       renderItem={renderItem}
-      // Exact layout is only known when there's no variable-height header.
       getItemLayout={header ? undefined : getItemLayout}
       ListHeaderComponent={header}
       ListEmptyComponent={empty}

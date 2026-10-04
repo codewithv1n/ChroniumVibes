@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, TextInput, Pressable, SectionList, StyleSheet, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { normalizeText, pluralize } from '../core/format';
 import { libraryStore, prettyFolderPath } from '../services/libraryService';
@@ -226,7 +226,7 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     flex: 1,
   },
@@ -319,4 +319,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-});
+}));

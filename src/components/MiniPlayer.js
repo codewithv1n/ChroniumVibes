@@ -8,7 +8,7 @@
 
 import React, { useRef } from 'react';
 import { View, Text, Pressable, Animated, PanResponder, StyleSheet } from 'react-native';
-import { COLORS, SPACING, RADIUS, SIZES, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, SIZES, TYPOGRAPHY, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { playerStore, progressStore, togglePlayPause, skipToNext, skipToPrevious } from '../player/playerService';
 import { libraryStore } from '../services/libraryService';
@@ -81,7 +81,7 @@ export default function MiniPlayer() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   wrapper: {
     paddingHorizontal: SPACING.sm,
     paddingBottom: 6,
@@ -138,4 +138,4 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: COLORS.accent,
   },
-});
+}));

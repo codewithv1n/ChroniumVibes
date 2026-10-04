@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { COLORS, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, TYPOGRAPHY, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { formatTime } from '../core/format';
 import { progressStore, seekTo } from '../player/playerService';
@@ -47,7 +47,7 @@ export default function ProgressBar({ fallbackDuration = 0 }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     width: '100%',
   },
@@ -67,4 +67,4 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontVariant: ['tabular-nums'],
   },
-});
+}));

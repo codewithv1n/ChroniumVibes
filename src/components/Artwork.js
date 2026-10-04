@@ -9,7 +9,7 @@ import React, { memo, useState } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, RADIUS, placeholderColors } from '../styles/theme';
+import { COLORS, RADIUS, placeholderColors, themedStyles } from '../styles/theme';
 
 function Artwork({ uri, seed = '', size = 48, radius = RADIUS.sm, icon = 'musical-note', round = false, style }) {
   const [failedUri, setFailedUri] = useState(null);
@@ -53,7 +53,7 @@ export const CollageArtwork = memo(function CollageArtwork({ uris = [], seed, si
   );
 });
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   image: {
     backgroundColor: COLORS.bgCardHover,
   },
@@ -67,6 +67,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: COLORS.bgCardHover,
   },
-});
+}));
 
 export default memo(Artwork);

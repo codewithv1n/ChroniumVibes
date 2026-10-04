@@ -5,7 +5,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Text, Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, RADIUS, SPACING } from '../styles/theme';
+import { COLORS, RADIUS, SPACING, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { toastStore } from '../core/toast';
 
@@ -34,7 +34,7 @@ export default function Toast({ bottomOffset = 140 }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   toast: {
     position: 'absolute',
     left: SPACING.md,
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: SPACING.md,
     borderRadius: RADIUS.md,
-    backgroundColor: '#1B2636',
+    backgroundColor: COLORS.toast,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: COLORS.borderLight,
     elevation: 12,
@@ -55,8 +55,8 @@ const styles = StyleSheet.create({
   },
   text: {
     flex: 1,
-    color: COLORS.textPrimary,
+    color: COLORS.white,
     fontSize: 14,
     fontWeight: '500',
   },
-});
+}));

@@ -6,7 +6,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SIZES } from '../styles/theme';
+import { COLORS, SIZES, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { navStore, switchTab } from '../navigation/navigation';
 
@@ -46,7 +46,7 @@ export default function TabBar() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   bar: {
     flexDirection: 'row',
     backgroundColor: COLORS.bgDeep,
@@ -67,4 +67,4 @@ const styles = StyleSheet.create({
   labelActive: {
     color: COLORS.textPrimary,
   },
-});
+}));

@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, TYPOGRAPHY, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { formatTime } from '../core/format';
 import { playerStore } from '../player/playerService';
@@ -84,7 +84,7 @@ function SongTile({ track, index, onPress, showIndex = false, right, context }) 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: {
     height: SONG_TILE_HEIGHT,
     flexDirection: 'row',
@@ -147,6 +147,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontVariant: ['tabular-nums'],
   },
-});
+}));
 
 export default memo(SongTile);

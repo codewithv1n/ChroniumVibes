@@ -7,7 +7,7 @@
 
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
-import { COLORS, RADIUS } from '../styles/theme';
+import { COLORS, RADIUS, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { pluralize, formatTotalDuration } from '../core/format';
 import { showToast } from '../core/toast';
@@ -23,7 +23,7 @@ import {
   addTrackToPlaylist,
   removeTrackFromPlaylist,
 } from '../services/userDataService';
-import { playTracks } from '../player/playerService';
+import { playTracks, playerStore, togglePlayPause } from '../player/playerService';
 import { goBack, openSheet } from '../navigation/navigation';
 import ScreenHeader from '../components/ScreenHeader';
 import CollectionHeader from '../components/CollectionHeader';
@@ -53,6 +53,25 @@ function playAll(tracks, shuffle = false) {
   playTracks(ids, shuffle ? Math.floor(Math.random() * ids.length) : 0, { shuffle });
 }
 
+/**
+ * Big play button state: this collection is "current" when the queue holds
+ * exactly its songs (in any order, so shuffle counts). Then the button
+ * pauses/resumes instead of restarting from the first song.
+ */
+function useCollectionPlayback(tracks) {
+  const { queue, isPlaying } = useStore(playerStore, s => ({ queue: s.queue, isPlaying: s.isPlaying }));
+  const isCurrent = useMemo(() => {
+    if (tracks.length === 0 || queue.length !== tracks.length) return false;
+    const ids = new Set(tracks.map(t => t.id));
+    return queue.every(id => ids.has(id));
+  }, [tracks, queue]);
+
+  const onPlay = tracks.length
+    ? () => (isCurrent ? togglePlayPause() : playAll(tracks))
+    : undefined;
+  return { onPlay, isPlaying: isCurrent && isPlaying };
+}
+
 // ── Playlist ──────────────────────────────────────────────────
 
 export function PlaylistScreen({ playlistId, openAddSongs = false }) {
@@ -78,6 +97,7 @@ export function PlaylistScreen({ playlistId, openAddSongs = false }) {
     return out;
   }, [playlist, byId]);
   const tracks = useMemo(() => entries.map(e => e.track), [entries]);
+  const playback = useCollectionPlayback(tracks);
 
   const renderRight = useCallback((track, index) => {
     if (!editing) return undefined;
@@ -146,7 +166,8 @@ export function PlaylistScreen({ playlistId, openAddSongs = false }) {
             artwork={<CollageArtwork uris={tracks.slice(0, 12).map(t => t.artwork)} seed={playlist.name} size={size} radius={RADIUS.md} />}
             title={playlist.name}
             meta={`Playlist · ${meta}`}
-            onPlay={tracks.length ? () => playAll(tracks) : undefined}
+            onPlay={playback.onPlay}
+            isPlaying={playback.isPlaying}
             onShuffle={tracks.length ? () => playAll(tracks, true) : undefined}
             actions={[
               { icon: 'add-circle-outline', label: 'Add songs', onPress: () => setAdding(true) },
@@ -207,6 +228,7 @@ export function ListScreen({ kind, folderId }) {
     }
     return { title: info.title, tracks: list, icon: info.icon, emptyInfo: info.empty };
   }, [kind, folderId, folders, byId, favorites, tracksAll]);
+  const playback = useCollectionPlayback(tracks);
 
   const cover = artwork !== undefined
     ? <Artwork uri={artwork} seed={title} size={size} radius={RADIUS.md} icon={icon} />
@@ -223,7 +245,8 @@ export function ListScreen({ kind, folderId }) {
             artwork={tracks.length ? cover : <Artwork seed={title} size={size * 0.6} radius={RADIUS.md} icon={icon} />}
             title={title}
             meta={[meta, tracks.length ? `${pluralize(tracks.length, 'song')} · ${formatTotalDuration(totalDuration(tracks))}` : null].filter(Boolean).join(' · ')}
-            onPlay={tracks.length ? () => playAll(tracks) : undefined}
+            onPlay={playback.onPlay}
+            isPlaying={playback.isPlaying}
             onShuffle={tracks.length ? () => playAll(tracks, true) : undefined}
           />
         }
@@ -242,11 +265,11 @@ function Missing({ title }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   flex: {
     flex: 1,
   },
   reorder: {
     flexDirection: 'row',
   },
-});
+}));

@@ -2,7 +2,7 @@
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, TYPOGRAPHY, placeholderColors } from '../styles/theme';
+import { COLORS, SPACING, TYPOGRAPHY, placeholderColors, themedStyles } from '../styles/theme';
 import IconButton from './IconButton';
 
 export default function CollectionHeader({
@@ -12,6 +12,7 @@ export default function CollectionHeader({
   meta,
   seed,
   onPlay,
+  isPlaying = false,
   onShuffle,
   actions = [], 
   disabled,
@@ -52,10 +53,10 @@ export default function CollectionHeader({
               onPress={onPlay}
               disabled={disabled}
               accessibilityRole="button"
-              accessibilityLabel={`Play ${title}`}
+              accessibilityLabel={isPlaying ? `Pause ${title}` : `Play ${title}`}
               style={({ pressed }) => [styles.playButton, pressed && styles.pressed, disabled && styles.disabled]}
             >
-              <Ionicons name="play" size={26} color={COLORS.white} style={styles.playIcon} />
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={26} color={COLORS.white} style={!isPlaying && styles.playIcon} />
             </Pressable>
           ) : null}
         </View>
@@ -64,7 +65,7 @@ export default function CollectionHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   artwork: {
     alignItems: 'center',
     paddingTop: SPACING.md,
@@ -123,5 +124,5 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.35,
   },
-});
+}));
 

@@ -6,7 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themedStyles } from '../../styles/theme';
 import { useStore } from '../../core/store';
 import { libraryStore, loadLyrics } from '../../services/libraryService';
 import { closeSheet } from '../../navigation/navigation';
@@ -129,7 +129,7 @@ export function LyricsSheet({ trackId }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   promptBody: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
@@ -199,4 +199,4 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontWeight: '600',
   },
-});
+}));

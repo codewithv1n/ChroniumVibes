@@ -127,22 +127,6 @@ export function addListeningTime(trackId, seconds) {
   if (!listeningTimer) listeningTimer = setTimeout(commitListeningTime, 30000);
 }
 
-export function clearListeningHistory() {
-  pendingListening.clear();
-  statsStore.setState({ stats: {} });
-  statsWriter.write({});
-  return statsWriter.flush();
-}
-
-export function resetPlayCounts() {
-  const stats = statsStore.getState().stats;
-  const next = {};
-  for (const [id, s] of Object.entries(stats)) next[id] = { ...s, plays: 0 };
-  statsStore.setState({ stats: next });
-  statsWriter.write(next);
-  return statsWriter.flush();
-}
-
 // ── Recent searches ───────────────────────────────────────────
 
 export function addRecentSearch(query) {

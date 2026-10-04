@@ -35,13 +35,3 @@ export function quickPicks(tracks, stats, favorites, limit = 12, now = Date.now(
   return [...picks, ...recentlyAdded(tracks, limit).filter(t => !seen.has(t.id))].slice(0, limit);
 }
 
-/** Songs you used to play but haven't heard in 30+ days. */
-export function rediscover(tracks, stats, limit = 12, now = Date.now()) {
-  return tracks
-    .filter(t => {
-      const s = statOf(stats, t.id);
-      return s.plays > 0 && now - s.lastPlayed > 30 * DAY;
-    })
-    .sort((a, b) => statOf(stats, b.id).plays - statOf(stats, a.id).plays)
-    .slice(0, limit);
-}

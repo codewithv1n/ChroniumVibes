@@ -4,7 +4,7 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/theme';
+import { COLORS, SPACING, TYPOGRAPHY, themedStyles } from '../../styles/theme';
 import { useStore } from '../../core/store';
 import { formatTime, formatBytes, formatDate } from '../../core/format';
 import { libraryStore, prettyFolderPath, UNKNOWN_ALBUM } from '../../services/libraryService';
@@ -60,7 +60,7 @@ export default function SongInfoSheet({ trackId }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   content: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.md,
@@ -100,4 +100,4 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.textPrimary,
   },
-});
+}));

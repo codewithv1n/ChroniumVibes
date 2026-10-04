@@ -3,8 +3,7 @@ import { View, Text, Animated, AppState, BackHandler, StyleSheet } from 'react-n
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SIZES } from './src/styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SIZES, themeStore, themedStyles } from './src/styles/theme';
 import { useStore } from './src/core/store';
 import { runMigrations } from './src/core/storage';
 import { showToast } from './src/core/toast';
@@ -18,16 +17,15 @@ import {
   openAppSettings,
 } from './src/services/libraryService';
 import { initUserData, flushUserData, settingsStore } from './src/services/userDataService';
+import { systemStore, refreshSystemStatus, enableNotifications } from './src/services/systemService';
 import { initPlayer, restorePlaybackState, playerStore } from './src/player/playerService';
 import { navStore, handleBackPress, TABS } from './src/navigation/navigation';
-
 import HomeScreen from './src/screens/HomeScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import { PlaylistScreen, ListScreen } from './src/screens/CollectionScreen';
 import { SettingsScreen, FoldersScreen } from './src/screens/SettingsScreen';
 import NowPlayingScreen from './src/screens/NowPlayingScreen';
-
 import MiniPlayer from './src/components/MiniPlayer';
 import TabBar from './src/components/TabBar';
 import Toast from './src/components/Toast';
@@ -49,6 +47,7 @@ let booted = false;
 async function boot() {
   if (booted) return;
   booted = true;
+  refreshSystemStatus();
   await runMigrations();
   await initUserData();
   await initPlayer();
@@ -72,7 +71,7 @@ async function runScan({ announce }) {
   }
 }
 
-/** Fades/slides a pushed screen in. */
+
 function ScreenTransition({ children, animate }) {
   const progress = useRef(new Animated.Value(animate ? 0 : 1)).current;
   useEffect(() => {
@@ -95,10 +94,7 @@ function ScreenTransition({ children, animate }) {
   );
 }
 
-/**
- * Every tab keeps its root and pushed screens mounted (hidden when not on
- * top) so scroll positions survive tab switches and going back.
- */
+
 function TabStacks() {
   const tab = useStore(navStore, s => s.tab);
   const stacks = useStore(navStore, s => s.stacks);
@@ -129,6 +125,20 @@ function TabStacks() {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+function NotificationScreen() {
+  return (
+    <View style={styles.center}>
+      <EmptyState
+        icon="notifications-off-outline"
+        title="Turn on notifications"
+        message="VinVibes needs notifications to keep music playing in the background and to show the player on your lock screen. Tap below, then allow notifications for VinVibes."
+        actionLabel="Turn on notifications"
+        onAction={enableNotifications}
+      />
     </View>
   );
 }
@@ -182,24 +192,25 @@ function Shell() {
   const trackCount = useStore(libraryStore, s => s.tracks.length);
   const hasAnyIndexed = useStore(libraryStore, s => s.allTracks.length > 0);
   const hasCurrent = useStore(playerStore, s => !!s.currentId);
+  const themeMode = useStore(themeStore, s => s.mode);
+  const notificationsEnabled = useStore(systemStore, s => s.notificationsEnabled);
 
   useEffect(() => {
     boot();
   }, []);
 
-  // Android back: close sheet → queue → player → pop screen → Home.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     return () => sub.remove();
   }, []);
 
-  // Save state when leaving; re-check permission when returning (e.g. from
-  // system Settings after granting access).
+  
   const onAppStateChange = useCallback(async (state) => {
     if (state !== 'active') {
       flushUserData();
       return;
     }
+    refreshSystemStatus();
     const before = libraryStore.getState().permission;
     const now = await checkPermission();
     if (now === 'granted' && before !== 'granted') {
@@ -213,8 +224,11 @@ function Shell() {
     return () => sub.remove();
   }, [onAppStateChange]);
 
+
   let body;
-  if (!hasAnyIndexed && ['denied', 'blocked', 'unsupported'].includes(permission)) {
+  if (!notificationsEnabled) {
+    body = <NotificationScreen />;
+  } else if (!hasAnyIndexed && ['denied', 'blocked', 'unsupported'].includes(permission)) {
     body = <PermissionScreen permission={permission} />;
   } else if (!hasAnyIndexed && (status === 'idle' || status === 'loading')) {
     body = <LoadingState message="Scanning device..." progress={progress} />;
@@ -245,7 +259,7 @@ function Shell() {
 
   return (
     <View style={styles.app}>
-      <StatusBar style="light" />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <View style={[styles.flex, { paddingTop: insets.top }]}>
         {body}
         {status === 'scanning' && progress ? (
@@ -265,14 +279,15 @@ function Shell() {
 }
 
 export default function App() {
+  const themeMode = useStore(themeStore, s => s.mode);
   return (
     <SafeAreaProvider style={styles.app}>
-      <Shell />
+      <Shell key={themeMode} />
     </SafeAreaProvider>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   app: {
     flex: 1,
     backgroundColor: COLORS.bgDeep,
@@ -307,5 +322,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textPrimary,
   },
-});
+}));
 

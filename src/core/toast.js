@@ -1,7 +1,3 @@
-/**
- * VinVibes — Unobtrusive toast/snackbar messages.
- */
-
 import { createStore } from './store';
 
 export const toastStore = createStore({ toast: null });

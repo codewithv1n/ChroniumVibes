@@ -1,23 +1,7 @@
-/**
- * VinVibes — Playback engine (expo-audio)
- *
- * One AudioPlayer instance for the whole app, driven by a queue of track
- * ids. All screens, the mini player and the lock screen read the same
- * `playerStore`, so they can never disagree.
- *
- * Background playback notes (Android):
- * - Lock screen controls are activated ONCE; afterwards only the metadata
- *   is updated. Re-activating them per track rebuilds the media session,
- *   which drops the foreground service and lets Android kill playback.
- * - Lock screen / notification Previous & Next come from the patched
- *   expo-audio service (patches/expo-audio+*.patch) as "remoteCommand"
- *   events; the queue lives here in JS, so JS changes the track.
- * - Audio focus (calls, other apps) is handled natively by expo-audio.
- */
-
-import { AppState, Platform } from 'react-native';
-import { createAudioPlayer, setAudioModeAsync, requestNotificationPermissionsAsync } from 'expo-audio';
+import { AppState } from 'react-native';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { Asset } from 'expo-asset';
+import { requireNativeModule } from 'expo';
 import { createStore } from '../core/store';
 import { KEYS, readJSON, createDebouncedWriter } from '../core/storage';
 import { showToast } from '../core/toast';
@@ -33,17 +17,17 @@ import {
 const PLAY_COUNT_SECONDS = 30;
 
 export const playerStore = createStore({
-  queue: [], // track ids in play order
-  original: null, // un-shuffled order while shuffle is on
+  queue: [], 
+  original: null, 
   index: 0,
   currentId: null,
   isPlaying: false,
   isBuffering: false,
   shuffle: false,
-  repeat: 'off', // off | all | one
+  repeat: 'off', 
 });
 
-// Updated every ~500ms; kept separate so only progress UI re-renders.
+
 export const progressStore = createStore({ position: 0, duration: 0 });
 
 let player = null;
@@ -68,6 +52,11 @@ let hasAdvancedForToken = -1;
 let consecutiveFailures = 0;
 let pendingResumePosition = 0;
 let playCountedForToken = -1;
+// Track that should start playing once loaded. play() right after replace()
+// can be dropped when the player was paused, so it is retried from status updates.
+let autoplayToken = -1;
+let autoplayRetries = 0;
+const MAX_AUTOPLAY_RETRIES = 3;
 
 const persistWriter = createDebouncedWriter(KEYS.player, 2000);
 
@@ -88,8 +77,14 @@ export async function initPlayer() {
 
   // Bundled app icon used on the lock screen when a song has no artwork.
   try {
-    const [icon] = await Asset.loadAsync(require('../../assets/icon.png'));
-    fallbackArtworkUrl = icon.localUri || null;
+    const [icon] = await Asset.loadAsync(require('../../assets/ios/AppIcon~ios-marketing.png'));
+    let uri = icon.localUri || icon.uri;
+    // Release builds report a drawable resource name here, not a URL. Copy it
+    // to a real file, since the lock screen only accepts file:// or http(s)://.
+    if (uri && !isArtworkUrl(uri)) {
+      uri = await requireNativeModule('ExpoAsset').downloadAsync(icon.uri, icon.hash, icon.type);
+    }
+    fallbackArtworkUrl = isArtworkUrl(uri) ? uri : null;
   } catch (error) {
     fallbackArtworkUrl = null;
   }
@@ -159,7 +154,7 @@ function persistSoon() {
 
 function persistNow() {
   persistSoon();
-  persistWriter.flush();
+  return persistWriter.flush();
 }
 
 function ensurePlayer() {
@@ -175,39 +170,38 @@ function ensurePlayer() {
   return player;
 }
 
+// Native side parses this as java.net.URL; anything else throws.
+function isArtworkUrl(uri) {
+  return typeof uri === 'string' && /^(file|https?):\/\//.test(uri);
+}
+
 function lockScreenMetadata(track) {
+  const artwork = isArtworkUrl(track.artwork) ? track.artwork : fallbackArtworkUrl;
   return {
     title: track.title,
     artist: track.artist,
     albumTitle: track.album,
-    artworkUrl: track.artwork || fallbackArtworkUrl || undefined,
+    artworkUrl: artwork || undefined,
   };
 }
 
-/**
- * Android 13+: ask once for notification permission. Media controls are
- * normally exempt, but some manufacturers hide the playback notification
- * (and its lock screen controller) without it.
- */
-let notificationPermissionAsked = false;
-function ensureNotificationPermission() {
-  if (notificationPermissionAsked || Platform.OS !== 'android') return;
-  notificationPermissionAsked = true;
-  requestNotificationPermissionsAsync().catch(() => {});
-}
-
+/** Never throws: lock screen problems must not stop playback. */
 function applyLockScreenControls(track) {
   if (!player || !track) return;
-  const metadata = lockScreenMetadata(track);
-  if (lockScreenActive) {
-    player.updateLockScreenMetadata(metadata);
-    return;
+  try {
+    const metadata = lockScreenMetadata(track);
+    if (lockScreenActive) {
+      player.updateLockScreenMetadata(metadata);
+      return;
+    }
+    player.setActiveForLockScreen(true, metadata, {
+      showSeekForward: true,
+      showSeekBackward: true,
+    });
+    lockScreenActive = true;
+  } catch (error) {
+    console.error('Failed to set lock screen controls:', error);
   }
-  player.setActiveForLockScreen(true, metadata, {
-    showSeekForward: true,
-    showSeekBackward: true,
-  });
-  lockScreenActive = true;
 }
 
 // ── Loading tracks ────────────────────────────────────────────
@@ -249,7 +243,8 @@ async function loadIndex(index, { autoplay = true, startAt = 0 } = {}) {
     // A newer request (e.g. rapid Next taps) superseded this one.
     if (token !== loadToken) return;
     if (autoplay) {
-      ensureNotificationPermission();
+      autoplayToken = token;
+      autoplayRetries = 0;
       audioPlayer.play();
       recordPlayStarted(track.id);
     }
@@ -311,6 +306,7 @@ export function togglePlayPause() {
     return;
   }
   if (player.playing) {
+    autoplayToken = -1;
     player.pause();
     persistNow();
   } else {
@@ -406,6 +402,16 @@ function onPlaybackStatusUpdate(status) {
   }
 
   if (status.playing) consecutiveFailures = 0;
+
+  // Selected a song while paused: make sure it actually starts.
+  if (autoplayToken === token) {
+    if (status.playing) {
+      autoplayToken = -1;
+    } else if (status.isLoaded && !status.isBuffering && autoplayRetries < MAX_AUTOPLAY_RETRIES) {
+      autoplayRetries += 1;
+      player?.play();
+    }
+  }
 
   // Listening stats.
   const position = status.currentTime || 0;

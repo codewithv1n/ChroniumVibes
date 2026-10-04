@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, RADIUS, SIZES, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, SIZES, TYPOGRAPHY, themedStyles } from '../styles/theme';
 import { pluralize } from '../core/format';
 import Artwork, { CollageArtwork } from './Artwork';
 
@@ -29,16 +29,6 @@ export const PlaylistCard = memo(function PlaylistCard({ playlist, coverUris, on
   );
 });
 
-export const TrackCard = memo(function TrackCard({ track, onPress, width = SIZES.cardWidth }) {
-  return (
-    <CardShell onPress={() => onPress(track)} label={`${track.title} by ${track.artist}`} width={width}>
-      <Artwork uri={track.artwork} seed={track.album} size={width} radius={RADIUS.md} />
-      <Text style={styles.title} numberOfLines={1}>{track.title}</Text>
-      <Text style={styles.subtitle} numberOfLines={1}>{track.artist}</Text>
-    </CardShell>
-  );
-});
-
 export const QuickTile = memo(function QuickTile({ icon, label, onPress, artwork, seed }) {
   return (
     <Pressable
@@ -59,7 +49,7 @@ export const QuickTile = memo(function QuickTile({ icon, label, onPress, artwork
   );
 });
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   pressed: {
     opacity: 0.75,
     transform: [{ scale: 0.98 }],
@@ -99,4 +89,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingRight: SPACING.sm,
   },
-});
+}));

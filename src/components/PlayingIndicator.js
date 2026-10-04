@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, Easing, StyleSheet } from 'react-native';
-import { COLORS } from '../styles/theme';
+import { COLORS, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { settingsStore } from '../services/userDataService';
 
@@ -44,7 +44,7 @@ export default function PlayingIndicator({ playing = true, color = COLORS.accent
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -55,4 +55,4 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
     transformOrigin: 'bottom',
   },
-});
+}));

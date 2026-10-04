@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themedStyles } from '../styles/theme';
 
 function usePulse() {
   const opacity = useRef(new Animated.Value(0.45)).current;
@@ -73,7 +73,7 @@ export default function LoadingState({ message = 'Scanning device...', progress 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     flex: 1,
     paddingTop: SPACING.md,
@@ -136,4 +136,4 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.bgCardHover,
   },
-});
+}));

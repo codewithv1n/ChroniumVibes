@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, Modal, Pressable, FlatList, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { normalizeText } from '../core/format';
 import { libraryStore } from '../services/libraryService';
@@ -93,7 +93,7 @@ export default function AddSongsModal({ visible, title, subtitle, selectedIds, o
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: COLORS.bgDeep,
@@ -168,4 +168,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: SPACING.xl,
   },
-});
+}));

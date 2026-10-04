@@ -1,8 +1,3 @@
-/**
- * VinVibes — Renders whichever bottom sheet is open.
- */
-
-import React from 'react';
 import { useStore } from '../../core/store';
 import { sheetStore } from '../../navigation/navigation';
 import SongActionsSheet from './SongActionsSheet';

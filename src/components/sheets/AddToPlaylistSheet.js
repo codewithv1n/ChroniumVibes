@@ -6,7 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themedStyles } from '../../styles/theme';
 import { useStore } from '../../core/store';
 import { showToast } from '../../core/toast';
 import { pluralize } from '../../core/format';
@@ -151,7 +151,7 @@ export default function AddToPlaylistSheet({ trackId }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   trackLabel: {
     ...TYPOGRAPHY.caption,
     textAlign: 'center',
@@ -241,4 +241,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
-});
+}));

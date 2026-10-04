@@ -5,7 +5,7 @@
 import React, { memo } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES } from '../styles/theme';
+import { COLORS, SIZES, themedStyles } from '../styles/theme';
 
 function IconButton({ icon, onPress, size = 22, color = COLORS.textPrimary, label, disabled, style, hitSlop = 6, ...rest }) {
   return (
@@ -24,7 +24,7 @@ function IconButton({ icon, onPress, size = 22, color = COLORS.textPrimary, labe
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   button: {
     minWidth: SIZES.touchTarget,
     minHeight: SIZES.touchTarget,
@@ -38,6 +38,6 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.3,
   },
-});
+}));
 
 export default memo(IconButton);

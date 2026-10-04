@@ -4,7 +4,7 @@
 
 import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { COLORS, SPACING, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, TYPOGRAPHY, themedStyles } from '../styles/theme';
 
 function SectionHeader({ title, subtitle, actionLabel, onAction, style }) {
   return (
@@ -22,7 +22,7 @@ function SectionHeader({ title, subtitle, actionLabel, onAction, style }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -46,6 +46,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-});
+}));
 
 export default memo(SectionHeader);

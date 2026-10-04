@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/theme';
+import { COLORS, SPACING, TYPOGRAPHY, themedStyles } from '../../styles/theme';
 import { useStore } from '../../core/store';
 import { showToast } from '../../core/toast';
 import { libraryStore } from '../../services/libraryService';
@@ -68,7 +68,7 @@ export default function SongActionsSheet({ trackId, context = {} }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -93,4 +93,4 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.divider,
     marginBottom: SPACING.xs,
   },
-});
+}));

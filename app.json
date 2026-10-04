@@ -4,7 +4,7 @@
     "slug": "VinVibes",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/ios/AppIcon~ios-marketing.png",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
@@ -17,9 +17,9 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#06060b",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+        "backgroundImage": "./assets/android/res/mipmap-xxxhdpi/ic_launcher_background.png",
+        "monochromeImage": "./assets/android/res/mipmap-xxxhdpi/ic_launcher_monochrome.png"
       },
       "package": "com.codewithv1n.vinvibes",
       "permissions": [

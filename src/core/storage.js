@@ -1,13 +1,3 @@
-/**
- * VinVibes — Local persistence
- *
- * Small state (settings, favorites, stats, queue) lives in AsyncStorage.
- * The library index can hold thousands of tracks, so it is written to a
- * JSON file instead (AsyncStorage on Android has per-row size limits).
- *
- * Nothing here ever leaves the device.
- */
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Directory, Paths } from 'expo-file-system';
 
@@ -20,20 +10,12 @@ export const KEYS = {
   player: '@cv/player',
   playlists: '@vinvibes_playlists',
 };
-
-// Playlist key used before the app was renamed to VinVibes (schema <= 2).
 const LEGACY_PLAYLISTS_KEY = '@chroniumvibes_playlists';
 
 const SCHEMA_VERSION = 3;
 
-/**
- * Ordered migrations: MIGRATIONS[n] upgrades schema n -> n + 1.
- */
 const MIGRATIONS = {
-  // v1 (original app) only stored playlists under the same key, whose
-  // shape is unchanged. Nothing to transform; just stamp the version.
   1: async () => {},
-  // v3: app renamed to VinVibes — move playlists to the new key.
   2: async () => {
     const legacy = await AsyncStorage.getItem(LEGACY_PLAYLISTS_KEY);
     if (legacy === null) return;
@@ -84,10 +66,6 @@ export async function removeKeys(keys) {
   }
 }
 
-/**
- * Debounced writer: coalesces frequent updates (stats, playback position)
- * into one disk write.
- */
 export function createDebouncedWriter(key, delayMs = 1500) {
   let timer = null;
   let pending;
@@ -110,8 +88,6 @@ export function createDebouncedWriter(key, delayMs = 1500) {
     flush,
   };
 }
-
-// ── File-based JSON (library cache) ───────────────────────────
 
 function dataFile(name) {
   return new File(Paths.document, name);

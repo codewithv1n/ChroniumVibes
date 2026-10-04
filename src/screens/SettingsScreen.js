@@ -6,13 +6,11 @@ import React from 'react';
 import { View, Text, ScrollView, Switch, Pressable, FlatList, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, themeStore, setThemeMode, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
-import { showToast } from '../core/toast';
-import { pluralize, formatDate } from '../core/format';
+import { pluralize } from '../core/format';
 import {
   libraryStore,
-  scanLibrary,
   applyLibraryFilters,
   prettyFolderPath,
 } from '../services/libraryService';
@@ -20,11 +18,8 @@ import {
   settingsStore,
   updateSettings,
   toggleFolderExcluded,
-  clearListeningHistory,
-  resetPlayCounts,
-  clearRecentSearches,
 } from '../services/userDataService';
-import { navigate, openSheet } from '../navigation/navigation';
+import { navigate } from '../navigation/navigation';
 import ScreenHeader from '../components/ScreenHeader';
 
 const MIN_DURATION_STEPS = [0, 15, 30, 60];
@@ -38,7 +33,7 @@ function Section({ title, children }) {
   );
 }
 
-function Row({ icon, label, description, value, onPress, right, destructive }) {
+function Row({ icon, label, description, value, onPress, right }) {
   return (
     <Pressable
       onPress={onPress}
@@ -48,9 +43,9 @@ function Row({ icon, label, description, value, onPress, right, destructive }) {
       android_ripple={onPress ? { color: COLORS.accentSoft } : undefined}
       style={styles.row}
     >
-      <Ionicons name={icon} size={20} color={destructive ? COLORS.danger : COLORS.accentLight} />
+      <Ionicons name={icon} size={20} color={COLORS.accentLight} />
       <View style={styles.rowText}>
-        <Text style={[styles.rowLabel, destructive && styles.destructive]}>{label}</Text>
+        <Text style={styles.rowLabel}>{label}</Text>
         {description ? <Text style={styles.rowDescription}>{description}</Text> : null}
       </View>
       {value ? <Text style={styles.rowValue}>{value}</Text> : null}
@@ -81,37 +76,16 @@ function ToggleRow({ icon, label, description, settingKey }) {
 }
 
 export function SettingsScreen() {
-  const status = useStore(libraryStore, s => s.status);
-  const trackCount = useStore(libraryStore, s => s.tracks.length);
   const duplicates = useStore(libraryStore, s => s.duplicatesHidden);
-  const lastScan = useStore(libraryStore, s => s.lastScan);
   const folders = useStore(libraryStore, s => s.folders);
   const minDuration = useStore(settingsStore, s => s.minDurationSeconds);
-  const scanning = status === 'scanning' || status === 'loading';
-
-  const runScan = async (full) => {
-    showToast(full ? 'Re-reading all song details...' : 'Scanning device...', { icon: 'sync' });
-    const result = await scanLibrary({ full });
-    if (result) showToast(`${pluralize(result.total, 'song')} found`, { icon: 'musical-notes' });
-  };
-
   const cycleMinDuration = () => {
     const next = MIN_DURATION_STEPS[(MIN_DURATION_STEPS.indexOf(minDuration) + 1) % MIN_DURATION_STEPS.length];
     updateSettings({ minDurationSeconds: next });
     applyLibraryFilters();
   };
 
-  const confirm = (title, message, action, done) => openSheet('confirm', {
-    title,
-    message,
-    confirmLabel: 'Clear',
-    destructive: true,
-    onConfirm: async () => {
-      await action();
-      showToast(done);
-    },
-  });
-
+  const lightMode = useStore(themeStore, s => s.mode) === 'light';
   const excludedCount = folders.filter(f => f.excluded).length;
   const version = Constants.expoConfig?.version || '1.0.0';
 
@@ -120,7 +94,20 @@ export function SettingsScreen() {
       <ScreenHeader title="Settings" />
       <ScrollView contentContainerStyle={styles.content}>
         <Section title="APPEARANCE">
-          <Row icon="contrast-outline" label="Theme" value="Dark" description="Black and blue, designed for dark rooms and OLED screens." />
+          <Row
+            icon={lightMode ? 'sunny-outline' : 'moon-outline'}
+            label="Light mode"
+            description={lightMode ? 'White and blue, easy to read in daylight.' : 'Off: black and blue, designed for dark rooms and OLED screens.'}
+            right={
+              <Switch
+                value={lightMode}
+                onValueChange={v => setThemeMode(v ? 'light' : 'dark')}
+                trackColor={{ false: COLORS.bgCardHover, true: COLORS.accentDark }}
+                thumbColor={lightMode ? COLORS.accentLight : COLORS.textSecondary}
+                accessibilityLabel="Light mode"
+              />
+            }
+          />
           <ToggleRow icon="sparkles-outline" label="Animations" description="Equalizer bars, artwork transitions and screen motion." settingKey="animations" />
         </Section>
 
@@ -131,18 +118,6 @@ export function SettingsScreen() {
         </Section>
 
         <Section title="LIBRARY">
-          <Row
-            icon="sync-outline"
-            label={scanning ? 'Scanning...' : 'Scan for new music'}
-            description={lastScan ? `Last scan ${formatDate(lastScan)} · ${pluralize(trackCount, 'song')}` : undefined}
-            onPress={scanning ? undefined : () => runScan(false)}
-          />
-          <Row
-            icon="refresh-outline"
-            label="Refresh library"
-            description="Re-read titles, artists, albums and artwork from every file."
-            onPress={scanning ? undefined : () => runScan(true)}
-          />
           <Row
             icon="folder-outline"
             label="Included folders"
@@ -159,15 +134,6 @@ export function SettingsScreen() {
           {duplicates > 0 ? (
             <Row icon="copy-outline" label="Duplicate files hidden" value={String(duplicates)} description="Identical copies of the same file in different folders." />
           ) : null}
-        </Section>
-
-        <Section title="DATA">
-          <Row icon="time-outline" label="Clear listening history" destructive
-            onPress={() => confirm('Clear listening history?', 'Play counts and listening time will be removed. Home suggestions will start fresh.', clearListeningHistory, 'Listening history cleared')} />
-          <Row icon="stats-chart-outline" label="Reset play counts" destructive
-            onPress={() => confirm('Reset play counts?', 'Quick picks on Home will start fresh.', resetPlayCounts, 'Play counts reset')} />
-          <Row icon="search-outline" label="Clear recent searches" destructive
-            onPress={() => { clearRecentSearches(); showToast('Recent searches cleared'); }} />
         </Section>
 
         <Section title="ABOUT">
@@ -224,7 +190,7 @@ export function FoldersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   flex: {
     flex: 1,
   },
@@ -272,9 +238,6 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
   },
-  destructive: {
-    color: COLORS.danger,
-  },
   muted: {
     color: COLORS.textMuted,
   },
@@ -292,4 +255,4 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.divider,
   },
-});
+}));

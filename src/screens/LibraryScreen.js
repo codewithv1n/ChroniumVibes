@@ -8,7 +8,7 @@
 import React, { useMemo, useCallback } from 'react';
 import { View, Text, FlatList, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from '../styles/theme';
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SIZES, themedStyles } from '../styles/theme';
 import { useStore } from '../core/store';
 import { pluralize, formatTotalDuration } from '../core/format';
 import { sortTracks, SONG_SORT_OPTIONS } from '../core/sorting';
@@ -205,7 +205,6 @@ export default function LibraryScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.heading} accessibilityRole="header">Your Library</Text>
-        <IconButton icon="settings-outline" size={22} onPress={() => navigate('settings')} label="Settings" />
       </View>
 
       <View>
@@ -225,7 +224,7 @@ export default function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     flex: 1,
   },
@@ -236,6 +235,7 @@ const styles = StyleSheet.create({
     paddingRight: SPACING.xs,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.sm,
+    minHeight: SIZES.touchTarget + SPACING.md + SPACING.sm,
   },
   heading: {
     ...TYPOGRAPHY.display,
@@ -350,4 +350,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-});
+}));
